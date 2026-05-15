@@ -101,7 +101,7 @@ export default function SubscriptionPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="max-w-5xl mx-auto px-4 md:px-0">
       {/* Header */}
       <div className="text-center mb-10">
         <h1 className="text-3xl font-bold" style={{ color: 'var(--text-primary)' }}>
@@ -146,7 +146,6 @@ export default function SubscriptionPage() {
               background: 'var(--bg-card)',
               borderColor: plan.highlighted ? 'var(--color-primary)' : 'var(--border-color)',
               boxShadow: plan.highlighted ? '0 0 30px rgba(255,255,255,0.08)' : 'none',
-              transform: plan.highlighted ? 'scale(1.02)' : 'scale(1)',
             }}
           >
             {/* Badge */}

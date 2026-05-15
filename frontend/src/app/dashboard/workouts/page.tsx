@@ -167,9 +167,9 @@ export default function WorkoutsPage() {
   ];
 
   return (
-    <div className="max-w-4xl mx-auto pt-10">
+    <div className="max-w-4xl mx-auto px-4 md:px-0 pt-6 md:pt-10">
       {/* Header */}
-      <div className="mb-6 flex items-start justify-between">
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Workouts</h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>
@@ -177,7 +177,7 @@ export default function WorkoutsPage() {
           </p>
         </div>
         <button onClick={() => router.push('/dashboard/workouts/session')}
-          className="text-[10px] tracking-[0.3em] uppercase font-bold px-8 py-3 transition-all duration-200 cursor-pointer"
+          className="text-[10px] tracking-[0.3em] uppercase font-bold px-5 py-2.5 sm:px-8 sm:py-3 transition-all duration-200 cursor-pointer"
           style={{ border: '1px solid rgba(255,255,255,0.5)', background: 'transparent', color: '#fff' }}
           onMouseEnter={e => { const el = e.currentTarget; el.style.background = '#fff'; el.style.color = '#000'; }}
           onMouseLeave={e => { const el = e.currentTarget; el.style.background = 'transparent'; el.style.color = '#fff'; }}>
@@ -328,7 +328,7 @@ export default function WorkoutsPage() {
               </div>
             ) : (
               <div className="rounded-xl border p-12 shadow-sm text-center" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
-                <div className="text-5xl mb-3">🏋️</div>
+                <div className="text-4xl md:text-5xl mb-3">🏋️</div>
                 <p className="font-medium" style={{ color: 'var(--text-primary)' }}>No active plan yet</p>
                 <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>Generate your personalized plan using the form.</p>
               </div>

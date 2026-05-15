@@ -189,17 +189,17 @@ export default function DashboardPage() {
     <div style={{ minHeight: '100%' }}>
       {/* Editorial Header */}
       <div
-        className="px-12 py-10 flex items-end justify-between"
+        className="px-4 py-6 md:px-12 md:py-10 flex flex-col md:flex-row md:items-end justify-between gap-4"
         style={{ borderBottom: `1px solid ${borderColor}`, background: 'rgba(0,0,0,0.3)' }}
       >
         <div>
           <p className="text-[11px] tracking-[0.3em] uppercase font-semibold mb-3" style={{ color: mutedColor }}>
             {getTodayDate()}
           </p>
-          <h1 className="text-4xl font-bold tracking-tight leading-none text-white">
+          <h1 className="text-2xl md:text-4xl font-bold tracking-tight leading-none text-white">
             {getGreeting().toUpperCase()},
           </h1>
-          <h1 className="text-4xl font-bold tracking-tight leading-none mt-1 text-white">
+          <h1 className="text-2xl md:text-4xl font-bold tracking-tight leading-none mt-1 text-white">
             {(user?.firstName || 'ATHLETE').toUpperCase()}
           </h1>
           <p className="mt-4 text-[11px] tracking-[0.2em] uppercase" style={{ color: mutedColor }}>
@@ -219,7 +219,7 @@ export default function DashboardPage() {
 
       {/* Quote Bar */}
       <div
-        className="px-12 py-5 flex items-center gap-6"
+        className="px-4 py-4 md:px-12 md:py-5 flex flex-col md:flex-row items-center gap-6"
         style={{ borderBottom: `1px solid ${borderColor}`, borderLeft: '3px solid rgba(255,255,255,0.6)', background: 'rgba(0,0,0,0.25)' }}
       >
         <p className="text-[12px] italic leading-relaxed flex-1 text-white opacity-70">
@@ -251,7 +251,7 @@ export default function DashboardPage() {
         style={{ borderBottom: `1px solid ${borderColor}`, background: cardBg, backdropFilter: cardBackdrop }}
       >
         {/* Calories */}
-        <div className="px-10 py-8" style={{ borderRight: `1px solid ${borderColor}` }}>
+        <div className="px-4 py-6 md:px-10 md:py-8" style={{ borderRight: `1px solid ${borderColor}` }}>
           <p className="text-[11px] tracking-[0.3em] uppercase font-semibold mb-6 text-white opacity-65">Calories Today</p>
           {calorieTarget ? (
             <div className="flex items-center gap-6">
@@ -273,7 +273,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Water */}
-        <div className="px-10 py-8" style={{ borderRight: `1px solid ${borderColor}` }}>
+        <div className="px-4 py-6 md:px-10 md:py-8" style={{ borderRight: `1px solid ${borderColor}` }}>
           <p className="text-[11px] tracking-[0.3em] uppercase font-semibold mb-6 text-white opacity-65">Hydration</p>
           <div className="flex items-center gap-1.5 flex-wrap mb-4">
             {Array.from({ length: waterTarget }).map((_, i) => (
@@ -299,7 +299,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Body Metrics */}
-        <div className="px-10 py-8">
+        <div className="px-4 py-6 md:px-10 md:py-8">
           <p className="text-[11px] tracking-[0.3em] uppercase font-semibold mb-6 text-white opacity-65">Body Metrics</p>
           {profileData?.weight || bmi ? (
             <div className="space-y-4">
@@ -320,7 +320,7 @@ export default function DashboardPage() {
 
       {/* Goal Progress */}
       <div
-        className="px-12 py-8"
+        className="px-4 py-6 md:px-12 md:py-8"
         style={{ borderBottom: `1px solid ${borderColor}`, background: cardBg, backdropFilter: cardBackdrop }}
       >
         <div className="flex items-center justify-between mb-6">
@@ -338,7 +338,7 @@ export default function DashboardPage() {
               label={`${(profileData?.fitnessGoal || 'Fitness Goal').replace(/_/g, ' ')} — ${logsStats.totalWorkouts} sessions`}
               size="lg"
             />
-            <div className="grid grid-cols-3 gap-8 mt-8">
+            <div className="grid grid-cols-3 gap-4 md:gap-8 mt-8">
               <MiniProgress label="Consistency" value={consistencyPct ?? 0} />
               <MiniProgress label="Sessions" value={Math.min(100, Math.round((logsStats.totalWorkouts / 50) * 100))} />
               <MiniProgress label="Streak" value={Math.min(100, streak * 14)} />
@@ -372,7 +372,7 @@ export default function DashboardPage() {
 
       {/* Activity Heat Map */}
       <div
-        className="px-12 py-8"
+        className="px-4 py-6 md:px-12 md:py-8"
         style={{ background: cardBg, backdropFilter: cardBackdrop }}
       >
         <p className="text-[9px] tracking-[0.3em] uppercase font-semibold mb-2 text-white opacity-50">Activity Heat Map</p>
@@ -496,6 +496,7 @@ function ActivityHeatMap({ logs }: { logs: WorkoutLog[] }) {
   const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
   return (
+    <div className="overflow-x-auto">
     <div className="flex gap-1.5">
       <div className="flex flex-col gap-1.5 mr-2">
         {dayLabels.map((d, i) => (
@@ -516,6 +517,7 @@ function ActivityHeatMap({ logs }: { logs: WorkoutLog[] }) {
           ))}
         </div>
       ))}
+    </div>
     </div>
   );
 }

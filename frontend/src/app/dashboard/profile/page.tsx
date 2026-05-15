@@ -255,10 +255,10 @@ export default function ProfilePage() {
   const inputStyle = { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' };
 
   return (
-    <div className="max-w-3xl mx-auto px-10 py-10">
+    <div className="max-w-3xl mx-auto px-4 py-6 md:px-10 md:py-10">
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-10" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '24px' }}>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-10" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '24px' }}>
         <div>
           <h1 className="text-2xl font-bold text-white tracking-tight">Profile</h1>
           <p className="mt-1 text-sm text-white opacity-50">
@@ -315,7 +315,7 @@ export default function ProfilePage() {
       <form onSubmit={handleSave}>
         {/* Personal Information */}
         <SectionTitle>Personal Information</SectionTitle>
-        <div className="grid grid-cols-2 gap-x-12 gap-y-0 mb-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 sm:gap-x-12 gap-y-0 mb-10">
           <Row label="First Name" value={form.firstName} />
           <Row label="Last Name" value={form.lastName} />
           {editing ? (
@@ -338,7 +338,7 @@ export default function ProfilePage() {
 
         {/* Body Metrics */}
         <SectionTitle>Body Metrics</SectionTitle>
-        <div className="grid grid-cols-2 gap-x-12 gap-y-0 mb-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 sm:gap-x-12 gap-y-0 mb-2">
           {editing ? (
             <>
               <EditRow label="Weight" name="weight" value={form.weight} onChange={handleChange} type="number" placeholder="75" suffix="kg" inputClass={inputClass} inputStyle={inputStyle} />
@@ -359,7 +359,7 @@ export default function ProfilePage() {
         {(editing || form.chest || form.waist || form.hips || form.arms || form.thighs) && (
           <>
             <SectionTitle>Body Measurements</SectionTitle>
-            <div className="grid grid-cols-2 gap-x-12 gap-y-0 mb-10">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 sm:gap-x-12 gap-y-0 mb-10">
               {editing ? (
                 <>
                   <EditRow label="Chest" name="chest" value={form.chest} onChange={handleChange} type="number" suffix="cm" inputClass={inputClass} inputStyle={inputStyle} />
@@ -383,7 +383,7 @@ export default function ProfilePage() {
 
         {/* Fitness Goals */}
         <SectionTitle>Fitness Goals</SectionTitle>
-        <div className="grid grid-cols-2 gap-x-12 gap-y-0 mb-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 sm:gap-x-12 gap-y-0 mb-10">
           {editing ? (
             <>
               <EditRow label="Primary Goal" name="fitnessGoal" value={form.fitnessGoal} onChange={handleChange} inputClass={inputClass} inputStyle={inputStyle}

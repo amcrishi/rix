@@ -22,7 +22,7 @@ export default function WeeklyOverview({ completedDays, targetDays }: WeeklyOver
         </span>
       </div>
 
-      <div className="grid grid-cols-7 gap-2">
+      <div className="grid grid-cols-7 gap-1 sm:gap-2">
         {dayLabels.map((label, index) => {
           const isCompleted = completedDays.includes(index);
           const isToday = index === today;
@@ -30,12 +30,12 @@ export default function WeeklyOverview({ completedDays, targetDays }: WeeklyOver
 
           return (
             <div key={label} className="flex flex-col items-center gap-2">
-              <span className="text-xs font-medium"
+              <span className="text-[10px] sm:text-xs font-medium"
                 style={{ color: isToday ? 'var(--color-primary)' : 'var(--text-muted)' }}>
                 {label}
               </span>
               <div
-                className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all"
+                className="w-7 h-7 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all"
                 style={
                   isCompleted
                     ? { background: '#22c55e', color: '#fff' }

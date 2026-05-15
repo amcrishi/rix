@@ -6,6 +6,7 @@
  * Full-width B&W video background behind all content.
  */
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { RixLogo } from '@/components/ui/RixLogo';
@@ -17,6 +18,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const { loading, isAuthenticated, user, logout } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   if (loading) {
     return (
@@ -51,7 +53,7 @@ export default function DashboardLayout({
 
       {/* ── Top Navigation Bar ── */}
       <header
-        className="sticky top-0 z-20 flex items-center justify-between px-10"
+        className="sticky top-0 z-20 flex items-center justify-between px-4 md:px-10"
         style={{
           height: '56px',
           background: 'rgba(0,0,0,0.72)',
@@ -65,8 +67,8 @@ export default function DashboardLayout({
           <RixLogo size={22} variant="dark" />
         </Link>
 
-        {/* Center — Navigation */}
-        <nav className="flex items-center gap-1">
+        {/* Center — Navigation (hidden on mobile) */}
+        <nav className="hidden md:flex items-center gap-1">
           <NavItem href="/dashboard" label="Dashboard" />
           <NavItem href="/dashboard/workouts" label="Workouts" />
           <NavItem href="/dashboard/diet" label="Diet" />
@@ -75,8 +77,19 @@ export default function DashboardLayout({
           <NavItem href="/dashboard/subscription" label="Subscription" />
         </nav>
 
+        {/* Hamburger — mobile only */}
+        <button
+          className="md:hidden flex flex-col justify-center items-center w-8 h-8 gap-1.5 cursor-pointer"
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          aria-label="Toggle menu"
+        >
+          <span className={`block w-5 h-px bg-white transition-all duration-200 ${mobileMenuOpen ? 'rotate-45 translate-y-[3.5px]' : ''}`} />
+          <span className={`block w-5 h-px bg-white transition-all duration-200 ${mobileMenuOpen ? 'opacity-0' : ''}`} />
+          <span className={`block w-5 h-px bg-white transition-all duration-200 ${mobileMenuOpen ? '-rotate-45 -translate-y-[3.5px]' : ''}`} />
+        </button>
+
         {/* Right — User / Sign out */}
-        <div className="flex items-center gap-5 shrink-0">
+        <div className="hidden md:flex items-center gap-5 shrink-0">
           {user && (
             <Link
               href="/dashboard/profile"
@@ -94,6 +107,50 @@ export default function DashboardLayout({
           </button>
         </div>
       </header>
+
+      {/* ── Mobile Menu ── */}
+      {mobileMenuOpen && (
+        <div
+          className="md:hidden sticky top-[56px] z-20 flex flex-col py-3 px-4 gap-1"
+          style={{
+            background: 'rgba(0,0,0,0.92)',
+            borderBottom: '1px solid rgba(255,255,255,0.08)',
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+          }}
+        >
+          {[
+            { href: '/dashboard', label: 'Dashboard' },
+            { href: '/dashboard/workouts', label: 'Workouts' },
+            { href: '/dashboard/diet', label: 'Diet' },
+            { href: '/dashboard/progress', label: 'Progress' },
+            { href: '/dashboard/profile', label: 'Profile' },
+            { href: '/dashboard/subscription', label: 'Subscription' },
+          ].map(item => (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={() => setMobileMenuOpen(false)}
+              className="block px-3 py-2.5 text-[11px] tracking-[0.2em] uppercase font-semibold text-white opacity-70 hover:opacity-100 transition-opacity"
+            >
+              {item.label}
+            </Link>
+          ))}
+          <div className="border-t border-white/10 mt-2 pt-2 flex items-center justify-between px-3">
+            {user && (
+              <span className="text-[11px] tracking-[0.15em] uppercase font-medium text-white opacity-50">
+                {user.firstName} {user.lastName ?? ''}
+              </span>
+            )}
+            <button
+              onClick={() => { setMobileMenuOpen(false); logout(); }}
+              className="text-[11px] tracking-[0.15em] uppercase font-medium text-white opacity-50 hover:opacity-100 transition-opacity cursor-pointer"
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Main Content ── */}
       <main className="flex-1 relative z-10 overflow-y-auto">

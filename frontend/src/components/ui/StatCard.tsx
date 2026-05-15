@@ -15,14 +15,14 @@ interface StatCardProps {
 export default function StatCard({ label, value, unit, trend, trendValue }: StatCardProps) {
   return (
     <div
-      className="p-8 transition-all duration-200"
+      className="p-4 md:p-8 transition-all duration-200"
       style={{ borderBottom: '1px solid rgba(255,255,255,0.07)', borderRight: '1px solid rgba(255,255,255,0.07)' }}
     >
       <p className="text-[11px] tracking-[0.3em] uppercase font-semibold mb-4 text-white opacity-60">
         {label}
       </p>
       <div className="flex items-baseline gap-2">
-        <span className="text-5xl font-bold leading-none tracking-tight text-white">
+        <span className="text-3xl md:text-5xl font-bold leading-none tracking-tight text-white">
           {value}
         </span>
         {unit && (

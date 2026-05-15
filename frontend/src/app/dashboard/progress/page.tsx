@@ -87,7 +87,7 @@ export default function ProgressPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto pt-10">
+    <div className="max-w-4xl mx-auto px-4 md:px-0 pt-6 md:pt-10">
       <div className="mb-8">
         <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Progress</h1>
         <p className="mt-1" style={{ color: 'var(--text-secondary)' }}>Track your fitness journey over time.</p>
