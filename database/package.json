@@ -1,0 +1,20 @@
+{
+  "name": "ai-fitness-database",
+  "version": "1.0.0",
+  "description": "Database layer for AI Fitness Trainer",
+  "dependencies": {
+    "@prisma/client": "^5.7.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.7.0"
+  },
+  "prisma": {
+    "schema": "prisma/schema.prisma"
+  },
+  "scripts": {
+    "generate": "prisma generate",
+    "migrate": "prisma migrate dev",
+    "studio": "prisma studio",
+    "seed": "node prisma/seed.js"
+  }
+}

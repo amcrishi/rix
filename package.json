@@ -1,0 +1,16 @@
+{
+  "name": "ai-fitness-trainer",
+  "version": "1.0.0",
+  "description": "AI-powered personalized fitness trainer SaaS application",
+  "private": true,
+  "scripts": {
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "install:all": "cd backend && npm install && cd ../frontend && npm install",
+    "db:migrate": "cd database && npx prisma migrate dev",
+    "db:generate": "cd database && npx prisma generate",
+    "db:studio": "cd database && npx prisma studio"
+  },
+  "keywords": ["fitness", "ai", "workout", "saas"],
+  "license": "MIT"
+}

@@ -1,0 +1,181 @@
+// Prisma schema for AI Fitness Trainer
+// This defines the database models and relationships
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../backend/node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========================
+// User & Authentication
+// ========================
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  firstName String   @map("first_name")
+  lastName  String   @map("last_name")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  profile         Profile?
+  workoutPlans    WorkoutPlan[]
+  workoutLogs     WorkoutLog[]
+  workoutSessions WorkoutSession[]
+  cardioSessions  CardioSession[]
+  mealLogs        MealLog[]
+
+  @@map("users")
+}
+
+// ========================
+// User Profile
+// ========================
+
+model Profile {
+  id              String   @id @default(cuid())
+  userId          String   @unique @map("user_id")
+  age             Int?
+  gender          String?
+  weight          Float?   // in kg
+  height          Float?   // in cm
+  targetWeight    Float?   @map("target_weight") // goal weight in kg
+  phone           String?
+  dateOfBirth     String?  @map("date_of_birth") // ISO date string
+  fitnessGoal     String?  @map("fitness_goal") // lose_weight, build_muscle, maintain, endurance, flexibility
+  activityLevel   String?  @map("activity_level") // sedentary, light, moderate, active, very_active
+  experienceLevel String?  @map("experience_level") // beginner, intermediate, advanced
+  workoutPreference String? @map("workout_preference") // home, gym, outdoor, mixed
+  dietaryPreference String? @map("dietary_preference") // no_restriction, vegetarian, vegan, keto, paleo, gluten_free
+  daysPerWeek     Int?     @map("days_per_week")
+  medicalConditions String? @map("medical_conditions") // free text
+  bodyMeasurements Json?   @map("body_measurements") // { chest, waist, hips, arms, thighs }
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+// ========================
+// Workout Plans
+// ========================
+
+model WorkoutPlan {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  name        String
+  description String?
+  difficulty  String   // beginner, intermediate, advanced
+  durationWeeks Int    @map("duration_weeks")
+  isActive    Boolean  @default(true) @map("is_active")
+  generatedBy String   @default("rule") @map("generated_by") // rule, ai
+  planData    Json     @map("plan_data") // JSON structure of the workout plan
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("workout_plans")
+}
+
+// ========================
+// Workout Logs (Tracking)
+// ========================
+
+model WorkoutLog {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  exercise   String
+  sets       Int
+  reps       Int
+  weight     Float?   // in kg
+  duration   Int?     // in minutes (for cardio)
+  notes      String?
+  loggedAt   DateTime @default(now()) @map("logged_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("workout_logs")
+}
+
+// ========================
+// Workout Sessions (Live Tracker)
+// ========================
+
+model WorkoutSession {
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  planId        String?  @map("plan_id")       // optional link to workout plan
+  planDayIndex  Int?     @map("plan_day_index") // which day of the plan
+  name          String                          // e.g. "Day 1 – Chest & Triceps"
+  status        String   @default("in_progress") @map("status") // in_progress | completed | skipped
+  exercises     Json     @map("exercises")      // [{name, muscleGroup, equipment, sets: [{setNum, weight, reps, completed, completedAt}]}]
+  totalDuration Int?     @map("total_duration") // seconds
+  notes         String?
+  startedAt     DateTime @default(now()) @map("started_at")
+  completedAt   DateTime? @map("completed_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("workout_sessions")
+}
+
+// ========================
+// Cardio Sessions
+// ========================
+
+model CardioSession {
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  type          String                          // running | cycling | hiit | jump_rope | swimming | walking | other
+  duration      Int                             // minutes
+  distance      Float?                          // km or miles
+  distanceUnit  String?  @map("distance_unit")  // km | miles
+  intensity     String?                         // light | moderate | intense
+  caloriesBurned Int?    @map("calories_burned")
+  heartRate     Int?     @map("heart_rate")     // avg bpm
+  notes         String?
+  loggedAt      DateTime @default(now()) @map("logged_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("cardio_sessions")
+}
+
+// ========================
+// Meal / Diet Logs
+// ========================
+
+model MealLog {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  mealType  String   @map("meal_type")  // breakfast | lunch | dinner | snack
+  foodName  String   @map("food_name")
+  calories  Int                          // kcal
+  protein   Float?                       // grams
+  carbs     Float?                       // grams
+  fat       Float?                       // grams
+  quantity  Float?                       // amount
+  unit      String?                      // g | ml | piece | cup | plate
+  loggedAt  DateTime @default(now()) @map("logged_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("meal_logs")
+}

@@ -1,0 +1,19 @@
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: ai-fitness-backend
+    runtime: node
+    plan: free
+    buildCommand: chmod +x render-build.sh && ./render-build.sh
+    startCommand: cd backend && node src/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: DATABASE_URL
+        sync: false  # Set manually from Neon dashboard
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CLIENT_URL
+        sync: false  # Set to your Vercel frontend URL
