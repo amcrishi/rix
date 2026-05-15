@@ -5,6 +5,9 @@ set -e
 echo "==> Installing backend dependencies..."
 cd backend && npm ci
 
+echo "==> Installing ai-engine dependencies..."
+cd ../ai-engine && npm install
+
 echo "==> Installing Prisma CLI..."
 cd ../database && npm install prisma @prisma/client
 
