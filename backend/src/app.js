@@ -56,11 +56,13 @@ const authRoutes = require('./routes/auth.routes');
 const profileRoutes = require('./routes/profile.routes');
 const workoutRoutes = require('./routes/workout.routes');
 const dietRoutes = require('./routes/diet.routes');
+const subscriptionRoutes = require('./routes/subscription.routes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/workouts', workoutRoutes);
 app.use('/api/diet', dietRoutes);
+app.use('/api/subscription', subscriptionRoutes);
 
 // ===================
 // Error Handling

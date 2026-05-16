@@ -31,6 +31,7 @@ model User {
   workoutSessions WorkoutSession[]
   cardioSessions  CardioSession[]
   mealLogs        MealLog[]
+  subscription    Subscription?
 
   @@map("users")
 }
@@ -178,4 +179,28 @@ model MealLog {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("meal_logs")
+}
+
+// ========================
+// Subscriptions
+// ========================
+
+model Subscription {
+  id                  String   @id @default(cuid())
+  userId              String   @unique @map("user_id")
+  plan                String   @default("free")       // free | pro | elite
+  status              String   @default("active")     // active | cancelled | expired | past_due
+  billingCycle        String?  @map("billing_cycle")   // monthly | yearly
+  razorpayCustomerId  String?  @map("razorpay_customer_id")
+  razorpaySubscriptionId String? @map("razorpay_subscription_id")
+  razorpayPaymentId   String?  @map("razorpay_payment_id")
+  currentPeriodStart  DateTime? @map("current_period_start")
+  currentPeriodEnd    DateTime? @map("current_period_end")
+  cancelledAt         DateTime? @map("cancelled_at")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
 }

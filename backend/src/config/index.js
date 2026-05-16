@@ -24,6 +24,10 @@ const config = {
 
   // OpenAI
   openaiApiKey: process.env.OPENAI_API_KEY,
+
+  // Razorpay
+  razorpayKeyId: process.env.RAZORPAY_KEY_ID,
+  razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET,
 };
 
 // Validate critical config in production

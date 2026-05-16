@@ -18,7 +18,8 @@
     "jsonwebtoken": "^9.0.2",
     "express-validator": "^7.0.1",
     "express-rate-limit": "^7.1.4",
-    "@prisma/client": "^5.7.0"
+    "@prisma/client": "^5.7.0",
+    "razorpay": "^2.9.4"
   },
   "devDependencies": {
     "nodemon": "^3.0.2",

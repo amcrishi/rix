@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RIX — Deployment & Session Reference</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #e5e5e5; line-height: 1.7; padding: 40px 20px; }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { font-size: 2rem; font-weight: 700; color: #fff; margin-bottom: 8px; letter-spacing: -0.02em; }
+    .subtitle { color: #888; font-size: 0.9rem; margin-bottom: 40px; }
+    h2 { font-size: 1.3rem; font-weight: 600; color: #fff; margin-top: 40px; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid #222; }
+    h3 { font-size: 1rem; font-weight: 600; color: #ccc; margin-top: 24px; margin-bottom: 8px; }
+    p, li { color: #bbb; font-size: 0.95rem; }
+    ul, ol { padding-left: 20px; margin-bottom: 16px; }
+    li { margin-bottom: 6px; }
+    code { background: #1a1a2e; color: #7dd3fc; padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; }
+    pre { background: #111; border: 1px solid #222; border-radius: 8px; padding: 16px; overflow-x: auto; margin: 12px 0; }
+    pre code { background: none; padding: 0; color: #d4d4d4; }
+    .card { background: #111; border: 1px solid #222; border-radius: 12px; padding: 20px; margin: 16px 0; }
+    .card-title { font-weight: 600; color: #fff; margin-bottom: 8px; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+    th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid #222; font-size: 0.9rem; }
+    th { color: #888; font-weight: 600; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; }
+    td { color: #ccc; }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+    .badge-green { background: rgba(34,197,94,0.15); color: #4ade80; }
+    .badge-blue { background: rgba(59,130,246,0.15); color: #60a5fa; }
+    .badge-purple { background: rgba(139,92,246,0.15); color: #a78bfa; }
+    .badge-yellow { background: rgba(234,179,8,0.15); color: #facc15; }
+    a { color: #60a5fa; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .warning { background: rgba(234,179,8,0.1); border: 1px solid rgba(234,179,8,0.3); border-radius: 8px; padding: 14px 16px; margin: 12px 0; }
+    .warning-title { color: #facc15; font-weight: 600; font-size: 0.85rem; margin-bottom: 4px; }
+    .section-icon { margin-right: 8px; }
+    .timestamp { color: #555; font-size: 0.8rem; margin-top: 40px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <h1>🏋️ RIX — AI Fitness Trainer</h1>
+    <p class="subtitle">Deployment & Development Reference Guide — Session: May 16, 2026</p>
+
+    <!-- ═══════════════════════════════════════ -->
+    <h2><span class="section-icon">📋</span>Project Overview</h2>
+    <div class="card">
+      <p><strong>Description:</strong> AI-powered personalized fitness trainer SaaS — workout plans, progress tracking, diet logging, and AI coaching.</p>
+      <table>
+        <tr><th>Layer</th><th>Technology</th><th>Hosting</th></tr>
+        <tr><td>Frontend</td><td>Next.js 16 + Tailwind CSS 4 + TypeScript</td><td><span class="badge badge-green">Vercel (Free)</span></td></tr>
+        <tr><td>Backend</td><td>Express.js + Node.js</td><td><span class="badge badge-blue">Render (Free)</span></td></tr>
+        <tr><td>Database</td><td>PostgreSQL + Prisma ORM</td><td><span class="badge badge-purple">Neon (Free)</span></td></tr>
+        <tr><td>AI Engine</td><td>OpenAI API + Zod</td><td><span class="badge badge-yellow">API Key</span></td></tr>
+      </table>
+    </div>
+
+    <!-- ═══════════════════════════════════════ -->
+    <h2><span class="section-icon">🔗</span>Important URLs</h2>
+    <table>
+      <tr><th>Service</th><th>URL</th><th>Dashboard</th></tr>
+      <tr><td>GitHub Repo</td><td><a href="https://github.com/amcrishi/rix">github.com/amcrishi/rix</a></td><td>—</td></tr>
+      <tr><td>Backend (Render)</td><td><code>https://rix-backend.onrender.com</code></td><td><a href="https://dashboard.render.com">dashboard.render.com</a></td></tr>
+      <tr><td>Frontend (Vercel)</td><td>Your <code>.vercel.app</code> URL</td><td><a href="https://vercel.com/dashboard">vercel.com/dashboard</a></td></tr>
+      <tr><td>Database (Neon)</td><td>Connection string in Render env vars</td><td><a href="https://console.neon.tech">console.neon.tech</a></td></tr>
+    </table>
+
+    <!-- ═══════════════════════════════════════ -->
+    <h2><span class="section-icon">⚙️</span>Environment Variables</h2>
+
+    <h3>Render (Backend)</h3>
+    <table>
+      <tr><th>Key</th><th>Value</th></tr>
+      <tr><td><code>DATABASE_URL</code></td><td>Neon PostgreSQL connection string</td></tr>
+      <tr><td><code>JWT_SECRET</code></td><td>Your secret key</td></tr>
+      <tr><td><code>NODE_ENV</code></td><td><code>production</code></td></tr>
+      <tr><td><code>PORT</code></td><td><code>5000</code></td></tr>
+      <tr><td><code>CLIENT_URL</code></td><td>Your Vercel frontend URL</td></tr>
+      <tr><td><code>OPENAI_API_KEY</code></td><td>(Optional) For AI workout generation</td></tr>
+    </table>
+
+    <h3>Vercel (Frontend)</h3>
+    <table>
+      <tr><th>Key</th><th>Value</th></tr>
+      <tr><td><code>BACKEND_URL</code></td><td><code>https://rix-backend.onrender.com</code></td></tr>
+      <tr><td><code>NEXT_PUBLIC_API_URL</code></td><td><code>https://rix-backend.onrender.com/api</code></td></tr>
+    </table>
+
+    <!-- ═══════════════════════════════════════ -->
+    <h2><span class="section-icon">📁</span>Project Structure</h2>
+    <pre><code>ai-fitness-trainer/
+├── frontend/          → Next.js app (deployed to Vercel)
+│   ├── src/app/       → Pages (dashboard, login, register, etc.)
+│   ├── src/components/→ Reusable UI components
+│   ├── src/context/   → Auth context
+│   ├── src/lib/       → API helper
+│   ├── next.config.ts → Rewrites (proxies /api/* to backend)
+│   └── vercel.json    → Vercel config
+├── backend/           → Express REST API (deployed to Render)
+│   ├── src/app.js     → Express app with routes
+│   ├── src/server.js  → Entry point
+│   └── src/config/    → Config & Prisma client
+├── ai-engine/         → OpenAI integration
+│   └── src/services/  → Workout generation via OpenAI
+├── database/          → Prisma schema & migrations
+│   └── prisma/schema.prisma
+├── render-build.sh    → Render build script (installs all deps + runs migrations)
+├── render.yaml        → Render blueprint config
+└── package.json       → Root monorepo scripts</code></pre>
+
+    <!-- ═══════════════════════════════════════ -->
+    <h2><span class="section-icon">🚀</span>Deployment Flow</h2>
+    <ol>
+      <li><strong>Push to GitHub</strong> → <code>git add -A && git commit -m "message" && git push</code></li>
+      <li><strong>Vercel auto-deploys</strong> frontend from <code>frontend/</code> directory</li>
+      <li><strong>Render auto-deploys</strong> backend using <code>render-build.sh</code></li>
+      <li><strong>Database migrations</strong> run automatically during Render build (<code>prisma migrate deploy</code>)</li>
+    </ol>
+
+    <div class="warning">
+      <p class="warning-title">⚠️ Free Tier Limitations</p>
+      <p><strong>Render:</strong> Backend sleeps after 15 min of inactivity. First request after sleep takes ~30-60 seconds (cold start).</p>
+      <p><strong>Neon:</strong> Database auto-suspends after 5 min of inactivity. Reconnects in ~1 second.</p>
+      <p><strong>Vercel:</strong> Never sleeps. Always fast. Generous free tier.</p>
+    </div>
+
+    <!-- ═══════════════════════════════════════ -->
+    <h2><span class="section-icon">🛠️</span>Common Commands</h2>
+    <h3>Local Development</h3>
+    <pre><code># Install all dependencies
+cd backend && npm install
+cd ../ai-engine && npm install
+cd ../database && npm install
+cd ../frontend && npm install
+
+# Start backend (port 5000)
+cd backend && npm run dev
+
+# Start frontend (port 3000)
+cd frontend && npm run dev
+
+# Run database migrations
+cd database && npx prisma migrate dev
+
+# Open Prisma Studio (GUI for DB)
+cd database && npx prisma studio</code></pre>
+
+    <h3>Deployment</h3>
+    <pre><code># Push changes (triggers auto-deploy on both Vercel & Render)
+git add -A
+git commit -m "your message"
+git push
+
+# Force redeploy on Render (if auto-deploy doesn't trigger)
+# → Render Dashboard → Manual Deploy → Deploy latest commit
+
+# Force redeploy on Vercel
+# → Vercel Dashboard → Deployments → ⋮ → Redeploy</code></pre>
+
+    <h3>Database</h3>
+    <pre><code># Create a new migration
+cd database && npx prisma migrate dev --name your_migration_name
+
+# Apply migrations to production (runs automatically on deploy)
+cd database && npx prisma migrate deploy
+
+# Generate Prisma client after schema changes
+cd database && npx prisma generate
+
+# Check tables in Neon
+# → console.neon.tech → SQL Editor → SELECT tablename FROM pg_tables WHERE schemaname = 'public';</code></pre>
+
+    <!-- ═══════════════════════════════════════ -->
+    <h2><span class="section-icon">📱</span>Mobile Responsiveness Fixes (Applied)</h2>
+    <div class="card">
+      <p class="card-title">Changes made on May 16, 2026</p>
+      <table>
+        <tr><th>File</th><th>Fix</th></tr>
+        <tr><td><code>dashboard/layout.tsx</code></td><td>Added hamburger menu, mobile nav dropdown, responsive padding</td></tr>
+        <tr><td><code>dashboard/page.tsx</code></td><td>Responsive padding, text sizes, flex stacking, overflow scroll on heatmap</td></tr>
+        <tr><td><code>components/ui/StatCard.tsx</code></td><td>Smaller padding & text on mobile</td></tr>
+        <tr><td><code>dashboard/profile/page.tsx</code></td><td>Single-column forms on mobile, responsive gaps</td></tr>
+        <tr><td><code>dashboard/workouts/page.tsx</code></td><td>Header stacking, button sizing</td></tr>
+        <tr><td><code>dashboard/progress/page.tsx</code></td><td>Added mobile padding</td></tr>
+        <tr><td><code>dashboard/subscription/page.tsx</code></td><td>Removed scale transform, added padding</td></tr>
+        <tr><td><code>components/dashboard/WeeklyOverview.tsx</code></td><td>Smaller circles and gaps on mobile</td></tr>
+      </table>
+    </div>
+
+    <!-- ═══════════════════════════════════════ -->
+    <h2><span class="section-icon">🔧</span>Troubleshooting</h2>
+
+    <h3>Backend not responding</h3>
+    <ul>
+      <li>Check Render dashboard — is it "Live" (green)?</li>
+      <li>If sleeping, make a request and wait 30-60s for cold start</li>
+      <li>Check logs for errors in Render → your service → Logs tab</li>
+    </ul>
+
+    <h3>Database connection fails</h3>
+    <ul>
+      <li>Verify <code>DATABASE_URL</code> in Render env vars matches Neon connection string</li>
+      <li>Make sure it ends with <code>?sslmode=require</code></li>
+      <li>Check Neon dashboard — is the project active?</li>
+    </ul>
+
+    <h3>Frontend can't reach backend (CORS errors)</h3>
+    <ul>
+      <li>Ensure <code>CLIENT_URL</code> on Render matches your Vercel domain exactly</li>
+      <li>Ensure <code>BACKEND_URL</code> on Vercel matches your Render URL exactly</li>
+      <li>After changing env vars on Vercel, redeploy manually</li>
+    </ul>
+
+    <h3>Prisma migration issues</h3>
+    <ul>
+      <li>Never delete migration files from <code>database/prisma/migrations/</code></li>
+      <li>If stuck, check Neon SQL Editor for <code>_prisma_migrations</code> table</li>
+      <li>For fresh start: drop all tables in Neon, then redeploy on Render</li>
+    </ul>
+
+    <!-- ═══════════════════════════════════════ -->
+    <h2><span class="section-icon">📊</span>Database Schema (Key Tables)</h2>
+    <table>
+      <tr><th>Table</th><th>Purpose</th></tr>
+      <tr><td><code>users</code></td><td>User accounts (email, password, name)</td></tr>
+      <tr><td><code>profiles</code></td><td>Fitness profile (weight, height, goals, activity level)</td></tr>
+      <tr><td><code>workout_plans</code></td><td>Generated workout plans (rule-based or AI)</td></tr>
+      <tr><td><code>workout_logs</code></td><td>Individual exercise logs (sets, reps, weight)</td></tr>
+      <tr><td><code>workout_sessions</code></td><td>Live workout sessions with set tracking</td></tr>
+      <tr><td><code>cardio_sessions</code></td><td>Cardio activities (running, cycling, etc.)</td></tr>
+      <tr><td><code>meal_logs</code></td><td>Daily food/calorie tracking</td></tr>
+    </table>
+
+    <!-- ═══════════════════════════════════════ -->
+    <h2><span class="section-icon">🗺️</span>API Endpoints (Backend)</h2>
+    <table>
+      <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+      <tr><td>POST</td><td><code>/api/auth/register</code></td><td>Create account</td></tr>
+      <tr><td>POST</td><td><code>/api/auth/login</code></td><td>Login (returns JWT)</td></tr>
+      <tr><td>GET</td><td><code>/api/profile</code></td><td>Get user profile</td></tr>
+      <tr><td>PUT</td><td><code>/api/profile</code></td><td>Update profile</td></tr>
+      <tr><td>POST</td><td><code>/api/workouts/generate</code></td><td>Generate workout plan</td></tr>
+      <tr><td>GET</td><td><code>/api/workouts/active</code></td><td>Get active plan</td></tr>
+      <tr><td>GET</td><td><code>/api/workouts/logs</code></td><td>Get workout logs</td></tr>
+      <tr><td>POST</td><td><code>/api/workouts/sessions</code></td><td>Start workout session</td></tr>
+      <tr><td>POST</td><td><code>/api/workouts/cardio</code></td><td>Log cardio session</td></tr>
+      <tr><td>GET</td><td><code>/api/diet/logs</code></td><td>Get meal logs + daily summary</td></tr>
+      <tr><td>POST</td><td><code>/api/diet/logs</code></td><td>Log a meal</td></tr>
+    </table>
+
+    <!-- ═══════════════════════════════════════ -->
+    <h2><span class="section-icon">📝</span>Git Commits (This Session)</h2>
+    <ol>
+      <li><code>ee72a10</code> — Initial commit: AI Fitness Trainer full-stack app</li>
+      <li><code>41060e4</code> — Fix: install ai-engine dependencies in Render build</li>
+      <li><code>21678f1</code> — Fix: skip rewrites on Vercel when BACKEND_URL not set</li>
+      <li><code>8064234</code> — Fix mobile responsiveness across all pages</li>
+    </ol>
+
+    <!-- ═══════════════════════════════════════ -->
+    <h2><span class="section-icon">🔮</span>Next Steps / Future Ideas</h2>
+    <ul>
+      <li>Set <code>OPENAI_API_KEY</code> on Render to enable AI-generated workout plans</li>
+      <li>Add a custom domain (Vercel supports free custom domains)</li>
+      <li>Set up Razorpay for subscription payments (Pro/Elite plans)</li>
+      <li>Add Google OAuth for "Continue with Google" login</li>
+      <li>Add PWA support for mobile app-like experience</li>
+      <li>Implement push notifications for workout reminders</li>
+    </ul>
+
+    <p class="timestamp">Generated: May 16, 2026 • Session ID: e71edea7-c565-40b4-9acd-435007711367</p>
+  </div>
+</body>
+</html>

@@ -2,10 +2,13 @@
 
 /**
  * Subscription Page — /dashboard/subscription
+ * Integrated with Razorpay payment gateway.
  * 3-tier pricing: Free / Pro (₹499/mo) / Elite (₹999/mo)
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { api } from '@/lib/api';
+import { useAuth } from '@/context/AuthContext';
 
 interface Plan {
   id: string;
@@ -16,6 +19,14 @@ interface Plan {
   features: string[];
   highlighted?: boolean;
   badge?: string;
+}
+
+interface SubscriptionData {
+  plan: string;
+  status: string;
+  billingCycle: string | null;
+  currentPeriodEnd: string | null;
+  cancelledAt: string | null;
 }
 
 const PLANS: Plan[] = [
@@ -74,16 +85,58 @@ const PLANS: Plan[] = [
   },
 ];
 
+declare global {
+  interface Window {
+    Razorpay: new (options: Record<string, unknown>) => { open: () => void; on: (event: string, cb: () => void) => void };
+  }
+}
+
+function loadRazorpayScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (typeof window !== 'undefined' && window.Razorpay) {
+      resolve(true);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
+
 export default function SubscriptionPage() {
-  const [currentPlan] = useState('free');
+  const { user } = useAuth();
+  const [currentSubscription, setCurrentSubscription] = useState<SubscriptionData>({ plan: 'free', status: 'active', billingCycle: null, currentPeriodEnd: null, cancelledAt: null });
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+
+  const fetchSubscription = useCallback(async () => {
+    try {
+      const res = await api.get<{ subscription: SubscriptionData }>('/subscription');
+      if (res.data?.subscription) {
+        setCurrentSubscription(res.data.subscription);
+      }
+    } catch {
+      // Default to free
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSubscription();
+  }, [fetchSubscription]);
 
   const getPrice = (plan: Plan) => {
     if (plan.id === 'free') return '₹0';
     if (billingCycle === 'yearly') {
       const monthly = plan.id === 'pro' ? 499 : 999;
-      const yearly = Math.round(monthly * 10); // 2 months free
-      return `₹${yearly}`;
+      const yearly = Math.round(monthly * 10);
+      return `₹${yearly.toLocaleString('en-IN')}`;
     }
     return plan.price;
   };
@@ -97,11 +150,151 @@ export default function SubscriptionPage() {
     if (plan.id === 'free' || billingCycle !== 'yearly') return null;
     const monthly = plan.id === 'pro' ? 499 : 999;
     const saved = monthly * 2;
-    return `Save ₹${saved}/year`;
+    return `Save ₹${saved.toLocaleString('en-IN')}/year`;
   };
+
+  const handleUpgrade = async (planId: string) => {
+    if (planId === 'free') return;
+    setProcessing(planId);
+    setMessage(null);
+
+    try {
+      const scriptLoaded = await loadRazorpayScript();
+      if (!scriptLoaded) {
+        setMessage({ type: 'error', text: 'Failed to load payment gateway. Please try again.' });
+        setProcessing(null);
+        return;
+      }
+
+      const orderRes = await api.post<{
+        orderId: string;
+        amount: number;
+        currency: string;
+        keyId: string;
+        planId: string;
+        billingCycle: string;
+      }>('/subscription/create-order', { planId, billingCycle });
+
+      const orderData = orderRes.data;
+      if (!orderData) throw new Error('Failed to create order');
+
+      const options = {
+        key: orderData.keyId,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: 'RIX Fitness',
+        description: `${planId === 'pro' ? 'Pro' : 'Elite'} Plan — ${billingCycle}`,
+        order_id: orderData.orderId,
+        prefill: {
+          email: user?.email || '',
+          name: user ? `${user.firstName} ${user.lastName || ''}`.trim() : '',
+        },
+        theme: { color: '#000000' },
+        handler: async (response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
+          try {
+            await api.post('/subscription/verify', {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              planId,
+              billingCycle,
+            });
+            setMessage({ type: 'success', text: `🎉 Welcome to RIX ${planId === 'pro' ? 'Pro' : 'Elite'}! Your subscription is now active.` });
+            fetchSubscription();
+          } catch {
+            setMessage({ type: 'error', text: 'Payment was received but verification failed. Please contact support.' });
+          }
+          setProcessing(null);
+        },
+        modal: {
+          ondismiss: () => {
+            setProcessing(null);
+          },
+        },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', () => {
+        setMessage({ type: 'error', text: 'Payment failed. Please try again or use a different payment method.' });
+        setProcessing(null);
+      });
+      rzp.open();
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to initiate payment. Please try again.' });
+      setProcessing(null);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!confirm('Are you sure you want to cancel your subscription? You will retain access until the end of your billing period.')) return;
+    setCancelling(true);
+    try {
+      await api.post('/subscription/cancel', {});
+      setMessage({ type: 'success', text: 'Subscription cancelled. You can continue using your plan until the current period ends.' });
+      fetchSubscription();
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to cancel subscription. Please try again.' });
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  const isCurrentPlan = (planId: string) => currentSubscription.plan === planId;
+  const isActivePaid = currentSubscription.plan !== 'free' && currentSubscription.status === 'active';
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto px-4 md:px-0">
+      {/* Status Banner */}
+      {isActivePaid && (
+        <div className="mb-8 px-5 py-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <div>
+            <p className="text-sm font-semibold text-white">
+              You&apos;re on <span className="uppercase">{currentSubscription.plan}</span>
+              {currentSubscription.billingCycle && ` (${currentSubscription.billingCycle})`}
+            </p>
+            {currentSubscription.currentPeriodEnd && (
+              <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                {currentSubscription.status === 'cancelled'
+                  ? `Access until ${new Date(currentSubscription.currentPeriodEnd).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}`
+                  : `Renews on ${new Date(currentSubscription.currentPeriodEnd).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}`
+                }
+              </p>
+            )}
+          </div>
+          {currentSubscription.status === 'active' && (
+            <button
+              onClick={handleCancel}
+              disabled={cancelling}
+              className="text-[10px] tracking-[0.15em] uppercase font-semibold px-4 py-2 transition-all cursor-pointer disabled:opacity-50"
+              style={{ border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.5)', background: 'transparent' }}
+            >
+              {cancelling ? 'Cancelling...' : 'Cancel Plan'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Message */}
+      {message && (
+        <div className="mb-6 px-4 py-3 rounded-xl text-sm font-medium"
+          style={{
+            background: message.type === 'success' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+            border: `1px solid ${message.type === 'success' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`,
+            color: message.type === 'success' ? '#4ade80' : '#f87171',
+          }}>
+          {message.text}
+        </div>
+      )}
+
       {/* Header */}
       <div className="text-center mb-10">
         <h1 className="text-3xl font-bold" style={{ color: 'var(--text-primary)' }}>
@@ -162,6 +355,14 @@ export default function SubscriptionPage() {
               </div>
             )}
 
+            {/* Current plan indicator */}
+            {isCurrentPlan(plan.id) && (
+              <div className="absolute -top-3 right-4 px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase"
+                style={{ background: '#22c55e', color: '#fff' }}>
+                Current
+              </div>
+            )}
+
             {/* Plan name */}
             <h3 className="text-lg font-bold mt-2" style={{ color: 'var(--text-primary)' }}>
               {plan.name}
@@ -199,17 +400,31 @@ export default function SubscriptionPage() {
 
             {/* CTA Button */}
             <button
-              className="mt-6 w-full py-3 rounded-xl text-sm font-bold transition-all duration-300"
-              disabled={currentPlan === plan.id}
+              className="mt-6 w-full py-3 rounded-xl text-sm font-bold transition-all duration-300 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={isCurrentPlan(plan.id) || processing !== null}
+              onClick={() => handleUpgrade(plan.id)}
               style={
-                currentPlan === plan.id
+                isCurrentPlan(plan.id)
                   ? { background: 'var(--bg-hover)', color: 'var(--text-muted)', border: '1px solid var(--border-color)' }
                   : plan.highlighted
                     ? { background: '#fff', color: '#000', letterSpacing: '0.05em', textTransform: 'uppercase' as const }
                     : { background: 'transparent', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }
               }
             >
-              {currentPlan === plan.id ? 'Current Plan' : plan.id === 'free' ? 'Downgrade' : 'Upgrade Now'}
+              {processing === plan.id ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Processing...
+                </span>
+              ) : isCurrentPlan(plan.id)
+                ? 'Current Plan'
+                : plan.id === 'free'
+                  ? 'Downgrade'
+                  : 'Upgrade Now'
+              }
             </button>
           </div>
         ))}
@@ -221,23 +436,19 @@ export default function SubscriptionPage() {
           Frequently Asked Questions
         </h2>
         <div className="space-y-4">
-          <FAQ
-            q="Can I cancel anytime?"
-            a="Yes! You can cancel your subscription anytime. You'll continue to have access until the end of your billing period."
-          />
-          <FAQ
-            q="What payment methods do you accept?"
-            a="We accept UPI, credit cards, debit cards, and net banking through Razorpay."
-          />
-          <FAQ
-            q="Is there a free trial for Pro/Elite?"
-            a="Yes! New users get a 7-day free trial of Pro features when they sign up."
-          />
-          <FAQ
-            q="Can I switch between plans?"
-            a="Absolutely. You can upgrade or downgrade at any time. Pro-rated charges will be applied."
-          />
+          <FAQ q="Can I cancel anytime?" a="Yes! You can cancel your subscription anytime. You'll continue to have access until the end of your billing period." />
+          <FAQ q="What payment methods do you accept?" a="We accept UPI, credit cards, debit cards, and net banking through Razorpay." />
+          <FAQ q="Is there a free trial for Pro/Elite?" a="Yes! New users get a 7-day free trial of Pro features when they sign up." />
+          <FAQ q="Can I switch between plans?" a="Absolutely. You can upgrade or downgrade at any time. Pro-rated charges will be applied." />
+          <FAQ q="Is my payment secure?" a="Yes. All payments are processed securely by Razorpay, which is PCI DSS compliant. We never store your card details." />
         </div>
+      </div>
+
+      {/* Razorpay badge */}
+      <div className="mt-10 text-center pb-6">
+        <p className="text-[10px] tracking-[0.2em] uppercase" style={{ color: 'rgba(255,255,255,0.25)' }}>
+          Payments secured by Razorpay 🔒
+        </p>
       </div>
     </div>
   );
@@ -253,7 +464,7 @@ function FAQ({ q, a }: { q: string; a: string }) {
     >
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between p-4 text-left"
+        className="w-full flex items-center justify-between p-4 text-left cursor-pointer"
       >
         <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{q}</span>
         <svg
