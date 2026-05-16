@@ -3,10 +3,15 @@ const crypto = require('crypto');
 const prisma = require('../config/database');
 const config = require('../config');
 
-const razorpay = new Razorpay({
-  key_id: config.razorpayKeyId,
-  key_secret: config.razorpayKeySecret,
-});
+let razorpay;
+try {
+  razorpay = new Razorpay({
+    key_id: config.razorpayKeyId || '',
+    key_secret: config.razorpayKeySecret || '',
+  });
+} catch (err) {
+  console.error('Razorpay initialization failed:', err.message);
+}
 
 // Plan pricing in paise (₹1 = 100 paise)
 const PLAN_PRICES = {

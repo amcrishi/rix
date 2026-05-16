@@ -44,7 +44,9 @@ const createOrder = async (req, res, next) => {
       },
     });
   } catch (error) {
-    next(new AppError(error.message || 'Failed to create order', 400));
+    console.error('Create order error:', error);
+    const msg = error?.error?.description || error?.message || 'Failed to create order';
+    next(new AppError(msg, error?.statusCode || 400));
   }
 };
 
