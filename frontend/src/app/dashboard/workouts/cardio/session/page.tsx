@@ -36,7 +36,6 @@ const CARDIO_TYPES = [
   { id: 'jump_rope', label: 'Jump Rope', icon: '🤸', met: 12.3 },
   { id: 'swimming',  label: 'Swimming',  icon: '🏊', met: 6.0  },
   { id: 'walking',   label: 'Walking',   icon: '🚶', met: 3.5  },
-  { id: 'rowing',    label: 'Rowing',    icon: '🚣', met: 7.0  },
   { id: 'cycling_indoor', label: 'Spin',icon: '🎯', met: 8.0  },
   { id: 'other',     label: 'Other',     icon: '🏋️', met: 5.0  },
 ];
@@ -54,8 +53,62 @@ function haversine(lat1: number, lon1: number, lat2: number, lon2: number): numb
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function calcCalories(met: number, weightKg: number, elapsedSec: number): number {
-  return Math.round(met * weightKg * (elapsedSec / 3600));
+function calcCalories(met: number, weightKg: number, elapsedSec: number, distanceKm: number, speedKmh: number, activityType: string): number {
+  // Apple Health-style calorie calculation:
+  // Uses speed-adjusted MET for walking/running + distance-based cross-check
+  
+  let effectiveMet = met;
+  
+  if (activityType === 'walking') {
+    // Dynamic MET based on walking speed (ACSM Compendium of Physical Activities)
+    if (speedKmh <= 2.7) effectiveMet = 2.0;
+    else if (speedKmh <= 3.2) effectiveMet = 2.5;
+    else if (speedKmh <= 4.0) effectiveMet = 2.8;
+    else if (speedKmh <= 4.8) effectiveMet = 3.3;
+    else if (speedKmh <= 5.6) effectiveMet = 3.8;
+    else if (speedKmh <= 6.4) effectiveMet = 5.0;
+    else effectiveMet = 6.3; // brisk walking / race walking
+    
+    // Distance-based calculation (Apple Health approach): ~0.75-1.0 kcal per kg per km
+    const distanceFactor = speedKmh > 5 ? 1.0 : 0.8;
+    const distanceCalories = weightKg * distanceKm * distanceFactor;
+    
+    // Time-based MET calculation
+    const timeCalories = effectiveMet * weightKg * (elapsedSec / 3600);
+    
+    // Use the higher value (handles both short/intense and long/slow walks)
+    return Math.round(Math.max(distanceCalories, timeCalories));
+  }
+  
+  if (activityType === 'running') {
+    // Running: ~1.0-1.2 kcal per kg per km (speed increases MET)
+    if (speedKmh >= 6 && speedKmh < 8) effectiveMet = 8.3;
+    else if (speedKmh >= 8 && speedKmh < 10) effectiveMet = 9.8;
+    else if (speedKmh >= 10 && speedKmh < 12) effectiveMet = 11.0;
+    else if (speedKmh >= 12 && speedKmh < 14) effectiveMet = 12.5;
+    else if (speedKmh >= 14) effectiveMet = 14.5;
+    
+    const distanceCalories = weightKg * distanceKm * 1.05;
+    const timeCalories = effectiveMet * weightKg * (elapsedSec / 3600);
+    return Math.round(Math.max(distanceCalories, timeCalories));
+  }
+  
+  // Other activities: standard MET formula
+  return Math.round(effectiveMet * weightKg * (elapsedSec / 3600));
+}
+
+// Steps calculation (Apple Health uses stride length based on height, default ~0.7m for walking)
+function calcSteps(distanceKm: number, speedKmh: number, activityType: string): number {
+  if (activityType !== 'walking' && activityType !== 'running' && activityType !== 'hiking') return 0;
+  // Stride length varies by speed: slower = shorter stride
+  let strideMeters: number;
+  if (activityType === 'running') {
+    strideMeters = speedKmh > 10 ? 1.2 : speedKmh > 8 ? 1.0 : 0.85;
+  } else {
+    // Walking: stride ~0.6m (slow) to 0.78m (brisk)
+    strideMeters = speedKmh > 5.5 ? 0.78 : speedKmh > 4.5 ? 0.72 : speedKmh > 3.5 ? 0.67 : 0.60;
+  }
+  return Math.round((distanceKm * 1000) / strideMeters);
 }
 
 function fmt(s: number): string {
@@ -107,8 +160,9 @@ export default function LiveCardioPage() {
   }, []);
 
   const ctInfo = CARDIO_TYPES.find(c => c.id === selectedType) || CARDIO_TYPES[0];
-  const calories = calcCalories(ctInfo.met, userWeight, elapsed);
   const avgSpeed = elapsed > 0 && distanceKm > 0 ? (distanceKm / (elapsed / 3600)) : 0;
+  const calories = calcCalories(ctInfo.met, userWeight, elapsed, distanceKm, avgSpeed, selectedType);
+  const steps = calcSteps(distanceKm, avgSpeed, selectedType);
 
   // ── GPS Watcher ──────────────────────────────────────
   const startGPS = useCallback(() => {
@@ -297,7 +351,11 @@ export default function LiveCardioPage() {
           <StatBox label="Duration" value={fmt(elapsed)} unit="" color="#fff" />
           <StatBox label="Distance" value={distanceKm.toFixed(2)} unit="km" color="#3b82f6" />
           <StatBox label="Avg Speed" value={avgSpeed.toFixed(1)} unit="km/h" color="#a855f7" />
-          <StatBox label="Max Speed" value={maxSpeed.toFixed(1)} unit="km/h" color="#d4d4d4" />
+          {steps > 0 ? (
+            <StatBox label="Steps" value={steps.toLocaleString('en-IN')} unit="steps" color="#f59e0b" />
+          ) : (
+            <StatBox label="Max Speed" value={maxSpeed.toFixed(1)} unit="km/h" color="#d4d4d4" />
+          )}
           <StatBox label="Calories" value={String(calories)} unit="kcal" color="#22c55e" />
           <StatBox label="Pace" value={avgSpeed > 0 ? `${(60 / avgSpeed).toFixed(1)}` : '—'} unit="min/km" color="#eab308" />
         </div>
@@ -389,7 +447,11 @@ export default function LiveCardioPage() {
         <LiveStat label="Speed" value={currentSpeed.toFixed(1)} unit="km/h" color="#a855f7" />
         <LiveStat label="Avg Speed" value={avgSpeed.toFixed(1)} unit="km/h" color="#d4d4d4" />
         <LiveStat label="Calories" value={String(calories)} unit="kcal" color="#22c55e" />
-        <LiveStat label="Max Speed" value={maxSpeed.toFixed(1)} unit="km/h" color="#ec4899" />
+        {steps > 0 ? (
+          <LiveStat label="Steps" value={steps.toLocaleString('en-IN')} unit="steps" color="#f59e0b" />
+        ) : (
+          <LiveStat label="Max Speed" value={maxSpeed.toFixed(1)} unit="km/h" color="#ec4899" />
+        )}
         <LiveStat label="Pace" value={avgSpeed > 0 ? (60 / avgSpeed).toFixed(1) : '—'} unit="min/km" color="#eab308" />
       </div>
 

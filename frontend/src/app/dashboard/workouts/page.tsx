@@ -19,7 +19,6 @@ const CARDIO_TYPES = [
   { id: 'jump_rope', label: 'Jump Rope', icon: '🤸' },
   { id: 'swimming', label: 'Swimming', icon: '🏊' },
   { id: 'walking', label: 'Walking', icon: '🚶' },
-  { id: 'rowing', label: 'Rowing', icon: '🚣' },
   { id: 'other', label: 'Other', icon: '🏋️' },
 ];
 
