@@ -309,7 +309,7 @@ export default function LiveCardioPage() {
         </div>
 
         {/* Activity picker */}
-        <div className="grid grid-cols-5 gap-2 mb-6">
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-6">
           {CARDIO_TYPES.map(ct => (
             <button key={ct.id} onClick={() => setSelectedType(ct.id)}
               className="flex flex-col items-center gap-1.5 py-3 rounded-xl border transition-all"
