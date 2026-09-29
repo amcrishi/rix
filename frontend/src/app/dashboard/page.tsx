@@ -10,11 +10,11 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import StatCard from '@/components/ui/StatCard';
-import ProgressBar from '@/components/ui/ProgressBar';
 import TodayWorkout from '@/components/dashboard/TodayWorkout';
 import RecentActivity from '@/components/dashboard/RecentActivity';
 import WeeklyOverview from '@/components/dashboard/WeeklyOverview';
-import { WorkoutLog, WorkoutDay, RepStats, MuscleWindow } from '@/types';
+import { WorkoutLog, WorkoutDay, MuscleWindow } from '@/types';
+import { todayDayIndex, daysSinceLastSession, localTzOffsetMinutes } from '@/lib/schedule';
 
 const MOTIVATIONAL_QUOTES = [
   { text: "The only bad workout is the one that didn't happen.", author: "Unknown" },
@@ -58,22 +58,34 @@ function calcBurnedToday(logs: WorkoutLog[]): number {
   return uniqueSessions * 300;
 }
 
-/** Recommended water (ml) = weight × 35 ml → glasses of 250ml */
-function calcWaterTarget(weight?: number): number {
-  if (!weight) return 8;
-  return Math.round((weight * 35) / 250);
+/** How much a single tap adds or removes. */
+const WATER_STEP_ML = 250;
+
+/** Recommended intake in ml = weight x 35ml, defaulting to 2L. */
+function calcWaterTargetMl(weight?: number): number {
+  if (!weight) return 2000;
+  return Math.round(weight * 35);
 }
 
-/** Load today's water count from localStorage */
+/** ml -> litres, one decimal (1750 -> "1.8"). */
+function toLitres(ml: number): string {
+  return (ml / 1000).toFixed(1);
+}
+
+/**
+ * Load today's intake in ml.
+ * Keyed separately from the old glass-count storage so a stored "6 glasses"
+ * is never misread as 6ml.
+ */
 function loadWaterToday(): number {
   if (typeof window === 'undefined') return 0;
-  const key = `rix_water_${new Date().toDateString()}`;
+  const key = `rix_water_ml_${new Date().toDateString()}`;
   return parseInt(localStorage.getItem(key) || '0', 10);
 }
 
-function saveWaterToday(count: number) {
-  const key = `rix_water_${new Date().toDateString()}`;
-  localStorage.setItem(key, String(count));
+function saveWaterToday(ml: number) {
+  const key = `rix_water_ml_${new Date().toDateString()}`;
+  localStorage.setItem(key, String(ml));
 }
 
 export default function DashboardPage() {
@@ -82,20 +94,20 @@ export default function DashboardPage() {
   const quote = MOTIVATIONAL_QUOTES[new Date().getDate() % MOTIVATIONAL_QUOTES.length];
 
   type ProfileShape = { weight?: number; height?: number; targetWeight?: number; fitnessGoal?: string; age?: number; gender?: string; activityLevel?: string; daysPerWeek?: number };
-  type ActivePlanShape = { planData: { weeklySchedule?: WorkoutDay[]; schedule?: WorkoutDay[] }; createdAt?: string; difficulty?: string };
+  type ActivePlanShape = { id?: string; planData: { weeklySchedule?: WorkoutDay[]; schedule?: WorkoutDay[]; weekAnchor?: string }; createdAt?: string; difficulty?: string };
 
   const [profileData, setProfileData] = useState<ProfileShape | null>(null);
   const [logsStats, setLogsStats] = useState({ workoutsThisWeek: 0, totalWorkouts: 0, logs: [] as WorkoutLog[] });
   const [activePlan, setActivePlan] = useState<ActivePlanShape | null>(null);
   const [allLogs, setAllLogs] = useState<WorkoutLog[]>([]);
-  const [waterGlasses, setWaterGlasses] = useState(0);
-  const [repStats, setRepStats] = useState<RepStats | null>(null);
+  const [waterMl, setWaterMl] = useState(0);
   const [muscleWindows, setMuscleWindows] = useState<MuscleWindow[]>([]);
   const [muscleRange, setMuscleRange] = useState(1); // default: 7 days
   const [muscleError, setMuscleError] = useState('');
+  const [restarting, setRestarting] = useState(false);
 
   useEffect(() => {
-    setWaterGlasses(loadWaterToday());
+    setWaterMl(loadWaterToday());
     Promise.all([
       api.get<{ user: unknown; profile: ProfileShape }>('/profile')
         .then(r => { if (r.data?.profile) setProfileData(r.data.profile); })
@@ -109,29 +121,31 @@ export default function DashboardPage() {
       api.get<{ plan: ActivePlanShape }>('/workouts/active')
         .then(r => { if (r.data?.plan) setActivePlan(r.data.plan); })
         .catch(() => {}),
-      api.get<{ stats: RepStats }>('/workouts/stats/reps')
-        .then(r => { if (r.data?.stats) setRepStats(r.data.stats); })
-        .catch(() => {}),
       api.get<{ windows: MuscleWindow[] }>('/workouts/stats/muscle-volume')
         .then(r => { if (r.data?.windows) setMuscleWindows(r.data.windows); })
         .catch((e: { message?: string }) => setMuscleError(e?.message || 'Could not load training data.')),
     ]);
   }, []);
 
-  const addWater = () => {
-    const target = calcWaterTarget(profileData?.weight);
-    if (waterGlasses < target) {
-      const next = waterGlasses + 1;
-      setWaterGlasses(next);
-      saveWaterToday(next);
+  const restartWeek = async () => {
+    setRestarting(true);
+    try {
+      await api.post('/workouts/active/restart-week', { tzOffsetMinutes: localTzOffsetMinutes() });
+      window.location.reload();
+    } catch {
+      setRestarting(false);
     }
   };
+
+  const addWater = () => {
+    const next = waterMl + WATER_STEP_ML;
+    setWaterMl(next);
+    saveWaterToday(next);
+  };
   const removeWater = () => {
-    if (waterGlasses > 0) {
-      const next = waterGlasses - 1;
-      setWaterGlasses(next);
-      saveWaterToday(next);
-    }
+    const next = Math.max(0, waterMl - WATER_STEP_ML);
+    setWaterMl(next);
+    saveWaterToday(next);
   };
 
   // Streak from all logs
@@ -151,11 +165,18 @@ export default function DashboardPage() {
   })();
 
   // Today's workout from active plan
+  // The day actually scheduled for today — null on a rest day.
   const todayWorkout: WorkoutDay | null = (() => {
     if (!activePlan) return null;
     const schedule = activePlan.planData?.weeklySchedule || activePlan.planData?.schedule || [];
-    return schedule[0] || null;
+    const idx = todayDayIndex(schedule.length, { anchorIso: activePlan.planData?.weekAnchor });
+    return idx >= 0 ? schedule[idx] : null;
   })();
+
+  // Offer a fresh start after a long gap rather than showing a wall of
+  // missed days and a locked session.
+  const daysAway = daysSinceLastSession(allLogs[0]?.loggedAt);
+  const showWelcomeBack = !!activePlan && daysAway !== null && daysAway >= 7;
 
   // TDEE / calorie targets
   const tdee = calcTDEE(profileData?.weight, profileData?.height, profileData?.age, profileData?.gender, profileData?.activityLevel);
@@ -163,31 +184,10 @@ export default function DashboardPage() {
   const calorieTarget = tdee || null;
 
   // Water
-  const waterTarget = calcWaterTarget(profileData?.weight);
+  const waterTargetMl = calcWaterTargetMl(profileData?.weight);
+  const waterPct = Math.min(100, Math.round((waterMl / waterTargetMl) * 100));
 
-  // BMI
-  const bmi = profileData?.weight && profileData?.height
-    ? Math.round((profileData.weight / ((profileData.height / 100) ** 2)) * 10) / 10
-    : null;
 
-  // Goal progress: % of workouts completed vs plan target
-  const goalProgress = (() => {
-    if (!activePlan?.createdAt || !profileData?.daysPerWeek) return null;
-    const weeksSince = Math.max(1, Math.round((Date.now() - new Date(activePlan.createdAt).getTime()) / (7 * 24 * 3600 * 1000)));
-    const targetSessions = weeksSince * (profileData.daysPerWeek || 4);
-    return Math.min(100, Math.round((logsStats.totalWorkouts / Math.max(1, targetSessions)) * 100));
-  })();
-
-  // Week number of plan
-  const planWeek = (() => {
-    if (!activePlan?.createdAt) return null;
-    return Math.max(1, Math.round((Date.now() - new Date(activePlan.createdAt).getTime()) / (7 * 24 * 3600 * 1000)));
-  })();
-
-  // Consistency % = workoutsThisWeek / daysPerWeek
-  const consistencyPct = profileData?.daysPerWeek
-    ? Math.min(100, Math.round((logsStats.workoutsThisWeek / profileData.daysPerWeek) * 100))
-    : null;
 
   // Video background — always dark/white text
   const mutedColor = 'rgba(255,255,255,0.6)';
@@ -255,9 +255,34 @@ export default function DashboardPage() {
           trend={streak > 1 ? 'up' : undefined} trendValue={streak > 2 ? 'Keep going' : streak > 0 ? 'Great start' : undefined} />
       </div>
 
-      {/* Metrics Row: Calories + Water + Body */}
+      {/* Welcome back — offered after a long gap */}
+      {showWelcomeBack && (
+        <div
+          className="px-4 py-5 md:px-12 md:py-6 flex flex-col md:flex-row md:items-center justify-between gap-4"
+          style={{ borderBottom: `1px solid ${borderColor}`, background: 'rgba(34,197,94,0.06)' }}
+        >
+          <div>
+            <p className="text-[11px] tracking-[0.3em] uppercase font-semibold mb-1" style={{ color: '#22c55e' }}>
+              Welcome back
+            </p>
+            <p className="text-sm text-white opacity-80">
+              It&apos;s been {daysAway} days since your last session. Start the plan again from today rather than waiting for the schedule.
+            </p>
+          </div>
+          <button
+            onClick={restartWeek}
+            disabled={restarting}
+            className="shrink-0 text-[10px] tracking-[0.3em] uppercase font-bold px-6 py-3 transition-all disabled:opacity-50"
+            style={{ border: '1px solid #22c55e', color: '#22c55e', background: 'transparent' }}
+          >
+            {restarting ? 'Restarting…' : 'Restart from today'}
+          </button>
+        </div>
+      )}
+
+      {/* Metrics Row: Calories + Water */}
       <div
-        className="grid grid-cols-1 md:grid-cols-3"
+        className="grid grid-cols-1 md:grid-cols-2"
         style={{ borderBottom: `1px solid ${borderColor}`, background: cardBg, backdropFilter: cardBackdrop }}
       >
         {/* Calories */}
@@ -283,48 +308,39 @@ export default function DashboardPage() {
         </div>
 
         {/* Water */}
-        <div className="px-4 py-6 md:px-10 md:py-8" style={{ borderRight: `1px solid ${borderColor}` }}>
-          <p className="text-[11px] tracking-[0.3em] uppercase font-semibold mb-6 text-white opacity-65">Hydration</p>
-          <div className="flex items-center gap-1.5 flex-wrap mb-4">
-            {Array.from({ length: waterTarget }).map((_, i) => (
-              <button
-                key={i}
-                onClick={i < waterGlasses ? removeWater : addWater}
-                title={i < waterGlasses ? 'Remove' : 'Add glass'}
-                className="w-7 h-9 transition-all duration-150 hover:opacity-80 cursor-pointer"
-                style={{
-                  background: i < waterGlasses ? 'rgba(255,255,255,0.9)' : 'transparent',
-                  border: `1px solid ${i < waterGlasses ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.2)'}`,
-                }}
-              />
-            ))}
-          </div>
-          <div className="flex items-baseline gap-2 mt-2">
-            <span className="text-3xl font-bold leading-none text-white">{waterGlasses}</span>
-            <span className="text-[11px] tracking-[0.2em] uppercase" style={{ color: mutedColor }}>/ {waterTarget} glasses</span>
-          </div>
-          <p className="text-[10px] tracking-[0.2em] uppercase mt-2" style={{ color: waterGlasses >= waterTarget ? '#fff' : mutedColor }}>
-            {waterGlasses >= waterTarget ? 'Goal reached' : `${waterTarget - waterGlasses} remaining`}
-          </p>
-        </div>
-
-        {/* Body Metrics */}
         <div className="px-4 py-6 md:px-10 md:py-8">
-          <p className="text-[11px] tracking-[0.3em] uppercase font-semibold mb-6 text-white opacity-65">Body Metrics</p>
-          {profileData?.weight || bmi ? (
-            <div className="space-y-4">
-              <MetricRow label="Weight" value={profileData?.weight ? `${profileData.weight} kg` : '—'} />
-              {profileData?.targetWeight && (
-                <MetricRow label="Target" value={`${profileData.targetWeight} kg`} />
-              )}
-              <MetricRow label="BMI" value={bmi ? `${bmi}` : '—'} note={bmi ? getBMICategory(bmi) : undefined} />
-              {profileData?.height && (
-                <MetricRow label="Height" value={`${profileData.height} cm`} />
-              )}
-            </div>
-          ) : (
-            <p className="text-[11px] tracking-[0.2em] uppercase text-white opacity-55">Add metrics in Profile</p>
-          )}
+          <p className="text-[11px] tracking-[0.3em] uppercase font-semibold mb-6 text-white opacity-65">Hydration</p>
+
+          <div className="flex items-baseline gap-2">
+            <span className="text-3xl font-bold leading-none text-white">{toLitres(waterMl)}</span>
+            <span className="text-[11px] tracking-[0.2em] uppercase" style={{ color: mutedColor }}>
+              / {toLitres(waterTargetMl)} L
+            </span>
+          </div>
+
+          <div className="h-1.5 mt-4 mb-4" style={{ background: 'rgba(255,255,255,0.08)' }}>
+            <div className="h-full transition-all duration-300"
+              style={{ width: `${waterPct}%`, background: 'rgba(255,255,255,0.9)' }} />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button onClick={removeWater} disabled={waterMl === 0}
+              className="px-3 py-1.5 text-[10px] tracking-[0.2em] uppercase font-semibold transition-all disabled:opacity-30"
+              style={{ border: `1px solid ${borderColor}`, color: 'rgba(255,255,255,0.7)' }}>
+              − 250ml
+            </button>
+            <button onClick={addWater}
+              className="px-3 py-1.5 text-[10px] tracking-[0.2em] uppercase font-semibold transition-all"
+              style={{ border: '1px solid rgba(255,255,255,0.5)', color: '#fff' }}>
+              + 250ml
+            </button>
+          </div>
+
+          <p className="text-[10px] tracking-[0.2em] uppercase mt-3" style={{ color: waterMl >= waterTargetMl ? '#fff' : mutedColor }}>
+            {waterMl >= waterTargetMl
+              ? 'Goal reached'
+              : `${toLitres(waterTargetMl - waterMl)} L remaining`}
+          </p>
         </div>
       </div>
 
@@ -369,74 +385,127 @@ export default function DashboardPage() {
             );
           }
           const win = muscleWindows[muscleRange];
-          if (!win || win.totalSets === 0) {
+          if (!win) {
             return (
               <p className="text-[11px] tracking-[0.2em] uppercase text-white opacity-55">
-                {muscleWindows.length === 0
-                  ? 'No training data yet'
-                  : `Nothing logged in the last ${win?.label.toLowerCase() || 'period'}`}
+                No training data yet
               </p>
             );
           }
-          const peak = Math.max(...win.groups.map(g => g.sets), 1);
+
+          // `target` is absent on older backends; fall back to plain counts
+          // rather than judging every group against a target that isn't there.
+          const target = win.target ?? null;
+          const maxSets = Math.max(...win.groups.map(g => g.sets), 1);
+          // Scale past the target when a group overshoots, so exceeding is
+          // visible as a bar running beyond the target band.
+          const scaleMax = target ? Math.max(target.max, maxSets) : maxSets;
+
+          type GroupState = 'unknown' | 'none' | 'under' | 'on' | 'over';
+          const stateOf = (sets: number, hasTarget: boolean): GroupState => {
+            if (!hasTarget || !target) return 'unknown';
+            if (sets === 0) return 'none';
+            if (sets < target.min) return 'under';
+            if (sets <= target.max) return 'on';
+            return 'over';
+          };
+
+          const COLORS: Record<GroupState, string> = {
+            unknown: 'rgba(255,255,255,0.55)',
+            none: 'rgba(255,255,255,0.15)',
+            under: '#eab308',
+            on: '#22c55e',
+            over: '#f87171',
+          };
+
+          const pctOf = (n: number) => Math.min(100, (n / scaleMax) * 100);
+
           return (
             <>
+              {target && (
+                <p className="text-[9px] tracking-[0.2em] uppercase mb-4" style={{ color: mutedColor }}>
+                  Target {target.min}–{target.max} sets per group
+                  {win.days !== 7 && ` (${win.days} days)`}
+                </p>
+              )}
+
               <div className="space-y-3">
-                {win.groups.map(g => (
-                  <div key={g.muscleGroup} className="flex items-center gap-3">
-                    <span className="w-20 md:w-28 flex-shrink-0 text-[10px] tracking-[0.2em] uppercase font-semibold text-white opacity-70">
-                      {g.muscleGroup}
-                    </span>
-                    <div className="flex-1 h-6 relative" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                      <div className="h-full transition-all duration-500"
-                        style={{ width: `${(g.sets / peak) * 100}%`, background: 'rgba(255,255,255,0.85)' }} />
+                {win.groups.map(g => {
+                  const hasTarget = target !== null && g.onTarget !== null && g.onTarget !== undefined;
+                  const state = stateOf(g.sets, hasTarget);
+
+                  return (
+                    <div key={g.muscleGroup} className="flex items-center gap-3">
+                      <span className="w-20 md:w-28 flex-shrink-0 text-[10px] tracking-[0.2em] uppercase font-semibold text-white"
+                        style={{ opacity: state === 'none' ? 0.4 : 0.75 }}>
+                        {g.muscleGroup}
+                      </span>
+
+                      <div className="flex-1 h-6 relative" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                        {/* The 8-10 band, so "enough" is readable at a glance */}
+                        {target && hasTarget && (
+                          <div className="absolute top-0 bottom-0"
+                            style={{
+                              left: `${pctOf(target.min)}%`,
+                              width: `${pctOf(target.max) - pctOf(target.min)}%`,
+                              background: 'rgba(255,255,255,0.07)',
+                              borderLeft: '1px solid rgba(255,255,255,0.35)',
+                              borderRight: '1px solid rgba(255,255,255,0.35)',
+                            }}
+                            title={`Target ${target.min}–${target.max} sets`} />
+                        )}
+                        <div className="h-full relative transition-all duration-500"
+                          style={{ width: `${pctOf(g.sets)}%`, background: COLORS[state], opacity: 0.9 }} />
+                      </div>
+
+                      <span className="w-28 md:w-36 flex-shrink-0 text-right text-[10px] tracking-[0.1em] uppercase"
+                        style={{ color: mutedColor }}>
+                        <span className="font-bold text-sm" style={{ color: state === 'none' ? 'rgba(255,255,255,0.35)' : '#fff' }}>
+                          {g.sets}
+                        </span>
+                        {hasTarget && target ? ` / ${target.min}–${target.max}` : ' sets'}
+                        {state === 'over' && (
+                          <span className="ml-1 font-semibold" style={{ color: '#f87171' }}>
+                            +{g.sets - target!.max}
+                          </span>
+                        )}
+                      </span>
                     </div>
-                    <span className="w-24 md:w-32 flex-shrink-0 text-right text-[10px] tracking-[0.1em] uppercase"
-                      style={{ color: mutedColor }}>
-                      <span className="text-white font-bold text-sm">{g.sets}</span> sets · {g.reps} reps
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
-              <p className="mt-5 text-[9px] tracking-[0.2em] uppercase" style={{ color: mutedColor }}>
-                {win.totalSets} sets across {win.groups.length} muscle {win.groups.length === 1 ? 'group' : 'groups'}
+
+              {target && (
+                <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[9px] tracking-[0.2em] uppercase"
+                  style={{ color: mutedColor }}>
+                  {([
+                    ['on', 'On target'],
+                    ['under', 'Below'],
+                    ['over', 'Over'],
+                    ['none', 'Not trained'],
+                  ] as [GroupState, string][]).map(([key, label]) => (
+                    <span key={key} className="flex items-center gap-1.5">
+                      <span className="inline-block w-2.5 h-2.5" style={{ background: COLORS[key] }} />
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <p className="mt-3 text-[9px] tracking-[0.2em] uppercase" style={{ color: mutedColor }}>
+                {win.totalSets} sets logged
+                {target && (() => {
+                  const over = win.groups.filter(g => g.onTarget != null && g.sets > target.max);
+                  const behind = win.groups.filter(g => g.onTarget === false);
+                  const parts: string[] = [];
+                  if (over.length) parts.push(`over on ${over.map(g => g.muscleGroup).join(', ')}`);
+                  if (behind.length) parts.push(`behind on ${behind.map(g => g.muscleGroup).join(', ')}`);
+                  return parts.length ? ` · ${parts.join(' · ')}` : ' · all groups on target';
+                })()}
               </p>
             </>
           );
         })()}
-      </div>
-
-      {/* Goal Progress */}
-      <div
-        className="px-4 py-6 md:px-12 md:py-8"
-        style={{ borderBottom: `1px solid ${borderColor}`, background: cardBg, backdropFilter: cardBackdrop }}
-      >
-        <div className="flex items-center justify-between mb-6">
-          <p className="text-[9px] tracking-[0.3em] uppercase font-semibold text-white opacity-50">Goal Progress</p>
-          {planWeek && (
-            <span className="text-[9px] tracking-[0.2em] uppercase" style={{ color: mutedColor }}>
-              Week {planWeek}
-            </span>
-          )}
-        </div>
-        {goalProgress !== null ? (
-          <>
-            <ProgressBar
-              value={goalProgress}
-              label={`${(profileData?.fitnessGoal || 'Fitness Goal').replace(/_/g, ' ')} — ${logsStats.totalWorkouts} sessions`}
-              size="lg"
-            />
-            <div className="grid grid-cols-3 gap-4 md:gap-8 mt-8">
-              <MiniProgress label="Consistency" value={consistencyPct ?? 0} />
-              <MiniProgress label="Sessions" value={Math.min(100, Math.round((logsStats.totalWorkouts / 50) * 100))} />
-              <MiniProgress label="Streak" value={Math.min(100, streak * 14)} />
-            </div>
-          </>
-        ) : (
-          <p className="text-[11px] tracking-[0.2em] uppercase text-white opacity-55">
-            Generate a workout plan to begin tracking
-          </p>
-        )}
       </div>
 
       {/* Today's Workout + Activity */}
@@ -451,6 +520,7 @@ export default function DashboardPage() {
           <WeeklyOverview
             completedDays={getCompletedDaysThisWeek(allLogs)}
             targetDays={profileData?.daysPerWeek || 4}
+            onSelectDay={(isoDate) => router.push(`/dashboard/workouts?tab=history&date=${isoDate}`)}
           />
           <div style={{ borderTop: `1px solid ${borderColor}` }}>
             <RecentActivity logs={logsStats.logs} />
@@ -458,15 +528,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Activity Heat Map */}
-      <div
-        className="px-4 py-6 md:px-12 md:py-8"
-        style={{ background: cardBg, backdropFilter: cardBackdrop }}
-      >
-        <p className="text-[9px] tracking-[0.3em] uppercase font-semibold mb-2 text-white opacity-50">Activity Heat Map</p>
-        <p className="text-[9px] tracking-[0.2em] uppercase mb-6 text-white opacity-20">Last 12 weeks</p>
-        <ActivityHeatMap logs={allLogs} />
-      </div>
     </div>
   );
 }
@@ -487,15 +548,6 @@ function getCompletedDaysThisWeek(logs: WorkoutLog[]): number[] {
   }
   return [...days];
 }
-
-function getBMICategory(bmi: number): string {
-  if (bmi < 18.5) return 'Underweight';
-  if (bmi < 25) return 'Normal';
-  if (bmi < 30) return 'Overweight';
-  return 'Obese';
-}
-
-/* ─── Sub-Components ─── */
 
 function CalorieRing({ consumed, target }: { consumed: number; target: number }) {
   const percentage = Math.min((consumed / target) * 100, 100);
@@ -518,95 +570,3 @@ function CalorieRing({ consumed, target }: { consumed: number; target: number })
     </div>
   );
 }
-
-function MetricRow({ label, value, note }: { label: string; value: string; note?: string }) {
-  const textColor = '#fff';
-  const labelColor = 'rgba(255,255,255,0.55)';
-  return (
-    <div className="flex items-center justify-between py-1.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-      <span className="text-[11px] tracking-[0.2em] uppercase" style={{ color: labelColor }}>{label}</span>
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-bold" style={{ color: textColor }}>{value}</span>
-        {note && (
-          <span className="text-[10px] tracking-[0.15em] uppercase font-semibold text-white opacity-70">
-            {note}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function MiniProgress({ label, value }: { label: string; value: number }) {
-  const textColor = '#fff';
-  const labelColor = 'rgba(255,255,255,0.55)';
-  const trackColor = '#1a1a1a';
-  return (
-    <div className="text-center">
-      <div className="relative w-14 h-14 mx-auto mb-3">
-        <svg className="w-14 h-14 -rotate-90" viewBox="0 0 60 60">
-          <circle cx="30" cy="30" r="24" fill="none" stroke={trackColor} strokeWidth="4" />
-          <circle cx="30" cy="30" r="24" fill="none" stroke={textColor} strokeWidth="4"
-            strokeLinecap="square"
-            strokeDasharray={`${2 * Math.PI * 24}`}
-            strokeDashoffset={`${2 * Math.PI * 24 * (1 - value / 100)}`}
-            className="transition-all duration-700"
-          />
-        </svg>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-[10px] font-bold" style={{ color: textColor }}>{value}%</span>
-        </div>
-      </div>
-      <p className="text-[10px] tracking-[0.2em] uppercase font-medium" style={{ color: labelColor }}>{label}</p>
-    </div>
-  );
-}
-
-function ActivityHeatMap({ logs }: { logs: WorkoutLog[] }) {
-  const weeks = 12;
-  const logDates = new Set(logs.map(l => new Date(l.loggedAt).toDateString()));
-  const data: number[][] = [];
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-
-  for (let w = weeks - 1; w >= 0; w--) {
-    const week: number[] = [];
-    for (let d = 0; d < 7; d++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() - w * 7 - (6 - d));
-      week.push(logDates.has(date.toDateString()) ? 1 : 0);
-    }
-    data.push(week);
-  }
-
-  const mutedColor = '#333';
-  const activeColor = '#fff';
-  const emptyColor = '#111';
-  const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-
-  return (
-    <div className="overflow-x-auto">
-    <div className="flex gap-1.5">
-      <div className="flex flex-col gap-1.5 mr-2">
-        {dayLabels.map((d, i) => (
-          <div key={i} className="w-3 h-3 flex items-center justify-center">
-            <span className="text-[8px] tracking-widest uppercase" style={{ color: mutedColor }}>{i % 2 === 0 ? d : ''}</span>
-          </div>
-        ))}
-      </div>
-      {data.map((week, wi) => (
-        <div key={wi} className="flex flex-col gap-1.5">
-          {week.map((active, di) => (
-            <div
-              key={di}
-              className="w-3 h-3 transition-colors"
-              style={{ background: active ? activeColor : emptyColor }}
-              title={active ? 'Workout logged' : 'No workout'}
-            />
-          ))}
-        </div>
-      ))}
-    </div>
-    </div>
-  );
-}
-
