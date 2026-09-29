@@ -125,6 +125,7 @@ model WorkoutSession {
   status        String   @default("in_progress") @map("status") // in_progress | completed | skipped
   exercises     Json     @map("exercises")      // [{name, muscleGroup, equipment, sets: [{setNum, weight, reps, completed, completedAt}]}]
   totalDuration Int?     @map("total_duration") // seconds
+  pausedMs      Int      @default(0) @map("paused_ms") // accumulated pause time, ms
   notes         String?
   startedAt     DateTime @default(now()) @map("started_at")
   completedAt   DateTime? @map("completed_at")

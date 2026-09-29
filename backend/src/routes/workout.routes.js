@@ -17,6 +17,8 @@ const {
   updateSession,
   getSessions,
   getSessionById,
+  getActiveSession,
+  deleteSession,
   getRepStats,
   getLastPerformance,
   getMuscleBreakdown,
@@ -38,8 +40,10 @@ router.post('/logs', logWorkoutValidation, validate, createWorkoutLog);
 // ── Sessions (live tracker) ──────────────────────────
 router.get('/sessions', getSessions);
 router.post('/sessions/start', startSession);
+router.get('/sessions/active', getActiveSession);
 router.get('/sessions/:id', getSessionById);
 router.patch('/sessions/:id', updateSession);
+router.delete('/sessions/:id', deleteSession);
 
 // ── Stats (keep before /:id) ─────────────────────────
 router.get('/stats/reps', getRepStats);

@@ -221,7 +221,7 @@ const startSession = asyncHandler(async (req, res) => {
  */
 const updateSession = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { exercises, status, notes, totalDuration } = req.body;
+  const { exercises, status, notes, totalDuration, pausedMs } = req.body;
 
   const existing = await prisma.workoutSession.findFirst({
     where: { id, userId: req.user.id },
@@ -232,6 +232,7 @@ const updateSession = asyncHandler(async (req, res) => {
   if (exercises !== undefined) updateData.exercises = exercises;
   if (notes !== undefined) updateData.notes = notes;
   if (totalDuration !== undefined) updateData.totalDuration = parseInt(totalDuration);
+  if (pausedMs !== undefined) updateData.pausedMs = Math.max(0, parseInt(pausedMs) || 0);
   if (status === 'completed') {
     updateData.status = 'completed';
     updateData.completedAt = new Date();
@@ -283,6 +284,36 @@ const getSessions = asyncHandler(async (req, res) => {
   ]);
 
   res.json({ success: true, data: { sessions, total, page } });
+});
+
+/**
+ * GET /api/workouts/sessions/active
+ * The session still in progress, if any, so a workout survives navigating
+ * away. Elapsed time is derived from startedAt rather than a client counter.
+ */
+const getActiveSession = asyncHandler(async (req, res) => {
+  const session = await prisma.workoutSession.findFirst({
+    where: { userId: req.user.id, status: 'in_progress' },
+    orderBy: { startedAt: 'desc' },
+  });
+  res.json({ success: true, data: { session: session || null } });
+});
+
+/**
+ * DELETE /api/workouts/sessions/:id
+ * Discard a session. Used to abandon a workout started by mistake, which
+ * would otherwise stay in progress and resume forever.
+ */
+const deleteSession = asyncHandler(async (req, res) => {
+  const existing = await prisma.workoutSession.findFirst({
+    where: { id: req.params.id, userId: req.user.id },
+  });
+  if (!existing) {
+    return res.status(404).json({ success: false, error: { message: 'Session not found' } });
+  }
+
+  await prisma.workoutSession.delete({ where: { id: req.params.id } });
+  res.json({ success: true, data: { message: 'Session discarded.' } });
 });
 
 /**
@@ -410,4 +441,4 @@ const getCardioSessions = asyncHandler(async (req, res) => {
   res.json({ success: true, data: { sessions, total, page } });
 });
 
-module.exports = { generatePlan, getActivePlan, getAllPlans, getPlanById, deletePlan, getWorkoutLogs, createWorkoutLog, startSession, updateSession, getSessions, getSessionById, getRepStats, getLastPerformance, getMuscleBreakdown, restartWeek, logCardio, getCardioSessions };
+module.exports = { generatePlan, getActivePlan, getAllPlans, getPlanById, deletePlan, getWorkoutLogs, createWorkoutLog, startSession, updateSession, getSessions, getSessionById, getActiveSession, deleteSession, getRepStats, getLastPerformance, getMuscleBreakdown, restartWeek, logCardio, getCardioSessions };

@@ -61,6 +61,14 @@ interface LastPerformance {
   totalVolume: number;
 }
 
+interface ServerSession {
+  id: string;
+  startedAt: string;
+  pausedMs?: number;
+  planDayIndex?: number | null;
+  exercises: SessionExercise[];
+}
+
 interface ActivePlan {
   id: string;
   name: string;
@@ -135,8 +143,38 @@ export default function SessionPage() {
   const [previewDayIdx, setPreviewDayIdx] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState(0); // seconds
   const [saving, setSaving] = useState(false);
+  const [resuming, setResuming] = useState(true);
+  const [discarding, setDiscarding] = useState(false);
+  // Clock is derived from the server's startedAt so it survives navigation,
+  // reload, even a different device — never from a local counter.
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [pausedMs, setPausedMs] = useState(0);        // completed pauses
+  const [pausedAt, setPausedAt] = useState<number | null>(null); // current pause
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const startTimeRef = useRef<number>(0);
+  // Set synchronously so the plan loader doesn't overwrite the resumed day.
+  const resumedRef = useRef(false);
+
+  // Resume an unfinished session. The sets were already saved by the
+  // autosave on each logged set, so nothing is recovered from the browser.
+  useEffect(() => {
+    api.get<{ session: ServerSession | null }>('/workouts/sessions/active')
+      .then(r => {
+        const live = r.data?.session;
+        if (!live) return;
+
+        resumedRef.current = true;
+        setSessionId(live.id);
+        setStartedAt(new Date(live.startedAt).getTime());
+        setPausedMs(live.pausedMs || 0);
+        const began = new Date(live.startedAt).getTime();
+        setElapsed(Math.max(0, Math.floor((Date.now() - began - (live.pausedMs || 0)) / 1000)));
+        setExercises(Array.isArray(live.exercises) ? live.exercises : []);
+        if (live.planDayIndex != null) setSelectedDayIdx(live.planDayIndex);
+        setPhase('active');
+      })
+      .catch(() => {})
+      .finally(() => setResuming(false));
+  }, []);
 
   // Load active plan
   useEffect(() => {
@@ -146,6 +184,9 @@ export default function SessionPage() {
       setActivePlan(plan);
       const days = plan.planData?.weeklySchedule || plan.planData?.schedule || [];
       setSchedule(days);
+
+      // A resumed session already picked its day.
+      if (resumedRef.current) return;
 
       // Open on today's session if there is one, else the most recent
       // startable day, so the user isn't staring at a locked day.
@@ -168,17 +209,21 @@ export default function SessionPage() {
       .catch((e: { message?: string }) => setLastPerfError(e?.message || 'Could not load your previous numbers.'));
   }, []);
 
-  // Elapsed timer while session is active
+  // Elapsed = wall clock since start, minus any time spent paused.
+  const computeElapsed = useCallback((now = Date.now()) => {
+    if (!startedAt) return 0;
+    const pausedSoFar = pausedMs + (pausedAt ? now - pausedAt : 0);
+    return Math.max(0, Math.floor((now - startedAt - pausedSoFar) / 1000));
+  }, [startedAt, pausedMs, pausedAt]);
+
+  // The effect only owns the interval. `elapsed` is seeded wherever the
+  // clock is anchored (start, resume, unpause) so nothing is set
+  // synchronously from an effect.
   useEffect(() => {
-    if (phase === 'active') {
-      startTimeRef.current = Date.now() - elapsed * 1000;
-      timerRef.current = setInterval(() => {
-        setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000));
-      }, 1000);
-    }
+    if (phase !== 'active' || !startedAt || pausedAt) return;
+    timerRef.current = setInterval(() => setElapsed(computeElapsed()), 1000);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase]);
+  }, [phase, startedAt, pausedAt, computeElapsed]);
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60).toString().padStart(2, '0');
@@ -211,14 +256,19 @@ export default function SessionPage() {
     setExercises(sessionExercises);
 
     try {
-      const res = await api.post<{ session: { id: string } }>('/workouts/sessions/start', {
+      const res = await api.post<{ session: { id: string; startedAt: string } }>('/workouts/sessions/start', {
         planId: activePlan?.id,
         planDayIndex: selectedDayIdx,
         name: `${day.day} – ${day.focus}`,
         exercises: sessionExercises,
         tzOffsetMinutes: localTzOffsetMinutes(),
       });
-      setSessionId(res.data?.session?.id || null);
+      const created = res.data?.session;
+      setSessionId(created?.id || null);
+      setStartedAt(created?.startedAt ? new Date(created.startedAt).getTime() : Date.now());
+      setPausedMs(0);
+      setPausedAt(null);
+      setElapsed(0);
     } catch (err) {
       // A rejected start (e.g. the day is locked) must not drop the user
       // into a session the server has no record of.
@@ -230,8 +280,45 @@ export default function SessionPage() {
       // Any other failure (offline, server down) still allows local logging.
     }
 
+    setStartedAt(prev => prev ?? Date.now());
     setPhase('active');
     setActiveExerciseIdx(0);
+  };
+
+  // Pause freezes the clock; the accumulated total is persisted so it
+  // survives leaving the page mid-break.
+  const togglePause = () => {
+    if (pausedAt) {
+      const now = Date.now();
+      const total = pausedMs + (now - pausedAt);
+      setPausedMs(total);
+      setPausedAt(null);
+      if (startedAt) setElapsed(Math.max(0, Math.floor((now - startedAt - total) / 1000)));
+      if (sessionId) api.patch(`/workouts/sessions/${sessionId}`, { pausedMs: total }).catch(() => {});
+    } else {
+      setPausedAt(Date.now());
+    }
+  };
+
+  // Leave the session running and come back to it later.
+  const handleSaveExit = async () => {
+    if (sessionId) {
+      const total = pausedMs + (pausedAt ? Date.now() - pausedAt : 0);
+      await api.patch(`/workouts/sessions/${sessionId}`, { exercises, pausedMs: total }).catch(() => {});
+    }
+    router.push('/dashboard');
+  };
+
+  // Abandon it entirely, otherwise it stays in progress and resumes forever.
+  const handleDiscard = async () => {
+    if (!window.confirm('Discard this workout? Logged sets will be deleted and this cannot be undone.')) return;
+    setDiscarding(true);
+    try {
+      if (sessionId) await api.delete(`/workouts/sessions/${sessionId}`);
+      router.push('/dashboard');
+    } catch {
+      setDiscarding(false);
+    }
   };
 
   // Log a set
@@ -297,7 +384,8 @@ export default function SessionPage() {
         await api.patch(`/workouts/sessions/${sessionId}`, {
           exercises,
           status: 'completed',
-          totalDuration: elapsed,
+          totalDuration: computeElapsed(),
+          pausedMs: pausedMs + (pausedAt ? Date.now() - pausedAt : 0),
         });
       }
     } catch { /* ignore */ }
@@ -380,6 +468,16 @@ export default function SessionPage() {
             View Plans
           </button>
         </div>
+      </div>
+    );
+  }
+
+  // Checking for an unfinished session — showing the picker first would
+  // flash the wrong screen and invite starting a duplicate workout.
+  if (resuming) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -615,11 +713,22 @@ export default function SessionPage() {
           <h1 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>{currentDay?.day}</h1>
           <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{currentDay?.focus}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <div className="text-right">
-            <p className="text-lg font-mono font-bold" style={{ color: 'var(--color-primary)' }}>{formatTime(elapsed)}</p>
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{completedSetsTotal}/{totalSetsTotal} sets</p>
+            <p className="text-lg font-mono font-bold"
+              style={{ color: pausedAt ? 'var(--text-muted)' : 'var(--color-primary)' }}>
+              {formatTime(elapsed)}
+            </p>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              {pausedAt ? 'Paused' : `${completedSetsTotal}/${totalSetsTotal} sets`}
+            </p>
           </div>
+          <button onClick={togglePause}
+            aria-label={pausedAt ? 'Resume timer' : 'Pause timer'}
+            className="px-3 py-2 rounded-lg text-sm font-semibold"
+            style={{ background: 'var(--bg-hover)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }}>
+            {pausedAt ? '▶' : '❚❚'}
+          </button>
           <button onClick={handleFinish} disabled={saving}
             className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60"
             style={{ background: '#22c55e' }}>
@@ -814,6 +923,22 @@ export default function SessionPage() {
               {saving ? 'Saving...' : '🏁 Finish Workout'}
             </button>
           )}
+
+          <div className="flex gap-2 mt-3">
+            <button onClick={handleSaveExit}
+              className="flex-1 py-2.5 rounded-lg text-xs font-semibold uppercase tracking-wider"
+              style={{ background: 'var(--bg-hover)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}>
+              Save &amp; exit
+            </button>
+            <button onClick={handleDiscard} disabled={discarding}
+              className="flex-1 py-2.5 rounded-lg text-xs font-semibold uppercase tracking-wider disabled:opacity-50"
+              style={{ background: 'transparent', color: '#f87171', border: '1px solid rgba(248,113,113,0.35)' }}>
+              {discarding ? 'Discarding…' : 'Discard'}
+            </button>
+          </div>
+          <p className="text-[11px] text-center mt-2.5" style={{ color: 'var(--text-muted)' }}>
+            Your sets save as you log them — leaving won&apos;t lose them.
+          </p>
         </div>
       )}
     </div>
