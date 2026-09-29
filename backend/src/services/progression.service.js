@@ -32,8 +32,7 @@ const readSet = (set) => ({
 const summariseExercise = (exercise, performedAt, sessionName) => {
   const sets = (Array.isArray(exercise.sets) ? exercise.sets : [])
     .filter((s) => s.completed)
-    .map(readSet)
-    .filter((s) => s.reps > 0);
+    .map(readSet);
 
   if (!sets.length) return null;
 

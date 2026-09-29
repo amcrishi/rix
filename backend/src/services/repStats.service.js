@@ -82,9 +82,10 @@ const collectEntries = (sessions, logs) => {
     for (const ex of exercises) {
       const sets = Array.isArray(ex.sets) ? ex.sets : [];
       for (const set of sets) {
+        // A completed set counts even if the reps box was left blank —
+        // it still happened, and it still trained the muscle.
         if (!set.completed) continue;
         const { reps, volume } = readSet(set);
-        if (reps <= 0) continue;
         entries.push({
           name: ex.name || 'Unknown exercise',
           muscleGroup: resolveMuscleGroup(ex.name, ex.muscleGroup),
@@ -101,7 +102,7 @@ const collectEntries = (sessions, logs) => {
     if (log.notes && log.notes.startsWith(SESSION_LOG_NOTE_PREFIX)) continue;
     const reps = log.reps || 0;
     const sets = log.sets || 0;
-    if (reps <= 0 || sets <= 0) continue;
+    if (sets <= 0) continue;
     // A manual log records `sets` sets of `reps` each — expand so set counts
     // and best-set figures stay comparable with tracker data.
     for (let i = 0; i < sets; i++) {
