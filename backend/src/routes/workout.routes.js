@@ -20,6 +20,7 @@ const {
   getRepStats,
   getLastPerformance,
   getMuscleBreakdown,
+  restartWeek,
   logCardio,
   getCardioSessions,
 } = require('../controllers/workout.controller');
@@ -52,6 +53,7 @@ router.post('/cardio', logCardio);
 // ── Plans ────────────────────────────────────────────
 router.post('/generate', generatePlanValidation, validate, generatePlan);
 router.get('/active', getActivePlan);
+router.post('/active/restart-week', restartWeek);
 router.get('/', getAllPlans);
 router.get('/:id', getPlanById);
 router.delete('/:id', deletePlan);

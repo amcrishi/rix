@@ -23,6 +23,27 @@ const MUSCLE_WINDOWS = [
   { key: '30d', label: '30 Days', days: 30 },
 ];
 
+// Common hypertrophy guidance: 8-10 working sets per muscle group per week.
+const WEEKLY_SET_TARGET = { min: 8, max: 10 };
+
+// Always reported, even at zero, so an untrained group is visible as a gap
+// rather than silently missing from the chart.
+const TRACKED_GROUPS = ['chest', 'back', 'legs', 'shoulders', 'arms', 'core'];
+
+/**
+ * Set target for a window, scaled from the weekly figure.
+ * Returns null for windows shorter than a week, where a weekly target is
+ * not a meaningful comparison.
+ */
+const targetForWindow = (days) => {
+  if (days < 7) return null;
+  const factor = days / 7;
+  return {
+    min: Math.round(WEEKLY_SET_TARGET.min * factor),
+    max: Math.round(WEEKLY_SET_TARGET.max * factor),
+  };
+};
+
 /**
  * Exercise name -> muscle group, built from the exercise library.
  * Used for manual logs, which carry no muscle group of their own.
@@ -279,6 +300,15 @@ const getMuscleBreakdown = async (userId) => {
       totalSets += 1;
     }
 
+    // Zero-fill the tracked groups so gaps in training are visible.
+    for (const group of TRACKED_GROUPS) {
+      if (!byGroup.has(group)) {
+        byGroup.set(group, { muscleGroup: group, sets: 0, reps: 0, volume: 0, exercises: new Set() });
+      }
+    }
+
+    const target = targetForWindow(days);
+
     const groups = [...byGroup.values()]
       .map((row) => ({
         muscleGroup: row.muscleGroup,
@@ -286,10 +316,15 @@ const getMuscleBreakdown = async (userId) => {
         reps: row.reps,
         volume: Math.round(row.volume),
         exercises: row.exercises.size,
+        // Only the tracked strength groups carry a target; cardio and
+        // anything unrecognised are reported without one.
+        onTarget: target && TRACKED_GROUPS.includes(row.muscleGroup)
+          ? row.sets >= target.min
+          : null,
       }))
       .sort((a, b) => b.sets - a.sets);
 
-    return { key, label, days, totalSets, groups };
+    return { key, label, days, totalSets, target, groups };
   });
 
   return { windows };

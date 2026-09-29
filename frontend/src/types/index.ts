@@ -109,6 +109,13 @@ export interface MuscleGroupStat {
   reps: number;
   volume: number;
   exercises: number;
+  /** null for groups with no target (cardio, unrecognised) or short windows. */
+  onTarget: boolean | null;
+}
+
+export interface SetTarget {
+  min: number;
+  max: number;
 }
 
 export interface MuscleWindow {
@@ -116,5 +123,7 @@ export interface MuscleWindow {
   label: string;
   days: number;
   totalSets: number;
+  /** Scaled from 8-10 sets/week; null for windows under a week. */
+  target: SetTarget | null;
   groups: MuscleGroupStat[];
 }

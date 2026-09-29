@@ -7,6 +7,7 @@ const { asyncHandler } = require('../utils/asyncHandler');
 const workoutService = require('../services/workout.service');
 const repStatsService = require('../services/repStats.service');
 const progressionService = require('../services/progression.service');
+const schedule = require('../services/schedule.service');
 const prisma = require('../config/database');
 
 /**
@@ -171,7 +172,33 @@ const createWorkoutLog = asyncHandler(async (req, res) => {
  * Start a new workout session. Body: { planId?, planDayIndex?, name, exercises }
  */
 const startSession = asyncHandler(async (req, res) => {
-  const { planId, planDayIndex, name, exercises } = req.body;
+  const { planId, planDayIndex, name, exercises, tzOffsetMinutes } = req.body;
+
+  // A day scheduled for later in the week cannot be started early. Enforced
+  // here as well as in the UI, since the client check is bypassable.
+  if (planId && planDayIndex != null) {
+    const plan = await prisma.workoutPlan.findFirst({
+      where: { id: planId, userId: req.user.id },
+    });
+
+    if (plan) {
+      const options = {
+        anchorIso: plan.planData?.weekAnchor,
+        tzOffsetMinutes: Number.isFinite(tzOffsetMinutes) ? tzOffsetMinutes : 0,
+      };
+      const dayIndex = parseInt(planDayIndex, 10);
+
+      if (!schedule.canStartDay(dayIndex, options)) {
+        const scheduledFor = schedule.planDayDate(dayIndex, options);
+        return res.status(403).json({
+          success: false,
+          error: {
+            message: `This workout is scheduled for ${scheduledFor.toISOString().slice(0, 10)}. You can view it now, but it can only be started on the day.`,
+          },
+        });
+      }
+    }
+  }
 
   const session = await prisma.workoutSession.create({
     data: {
@@ -301,6 +328,35 @@ const getMuscleBreakdown = asyncHandler(async (req, res) => {
   res.json({ success: true, data: breakdown });
 });
 
+/**
+ * POST /api/workouts/active/restart-week
+ * Re-anchor the active plan so Day 1 falls on today. Offered after a long
+ * absence so a returning user can train immediately instead of waiting for
+ * the calendar to come round.
+ */
+const restartWeek = asyncHandler(async (req, res) => {
+  const { tzOffsetMinutes } = req.body || {};
+  const offset = Number.isFinite(tzOffsetMinutes) ? tzOffsetMinutes : 0;
+
+  const plan = await prisma.workoutPlan.findFirst({
+    where: { userId: req.user.id, isActive: true },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  if (!plan) {
+    return res.status(404).json({ success: false, error: { message: 'No active plan to restart.' } });
+  }
+
+  const today = schedule.startOfLocalDay(new Date(), offset).toISOString().slice(0, 10);
+
+  const updated = await prisma.workoutPlan.update({
+    where: { id: plan.id },
+    data: { planData: { ...plan.planData, weekAnchor: today } },
+  });
+
+  res.json({ success: true, data: { plan: updated, weekAnchor: today } });
+});
+
 // ─────────────────────────────────────────────
 // CARDIO SESSIONS
 // ─────────────────────────────────────────────
@@ -354,4 +410,4 @@ const getCardioSessions = asyncHandler(async (req, res) => {
   res.json({ success: true, data: { sessions, total, page } });
 });
 
-module.exports = { generatePlan, getActivePlan, getAllPlans, getPlanById, deletePlan, getWorkoutLogs, createWorkoutLog, startSession, updateSession, getSessions, getSessionById, getRepStats, getLastPerformance, getMuscleBreakdown, logCardio, getCardioSessions };
+module.exports = { generatePlan, getActivePlan, getAllPlans, getPlanById, deletePlan, getWorkoutLogs, createWorkoutLog, startSession, updateSession, getSessions, getSessionById, getRepStats, getLastPerformance, getMuscleBreakdown, restartWeek, logCardio, getCardioSessions };
