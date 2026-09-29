@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 
 const GOALS = ['lose_weight', 'build_muscle', 'maintain', 'endurance', 'flexibility'];
@@ -64,7 +64,16 @@ type Tab = 'plan' | 'cardio' | 'history';
 
 export default function WorkoutsPage() {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>('plan');
+  // Deep link from the dashboard's weekly calendar: ?tab=history&date=YYYY-MM-DD
+  const searchParams = useSearchParams();
+  const urlTab = searchParams.get('tab');
+  const highlightDate = searchParams.get('date') || '';
+
+  const [tabOverride, setTabOverride] = useState<Tab | null>(null);
+  const tab: Tab =
+    tabOverride ??
+    (urlTab === 'history' || urlTab === 'cardio' || urlTab === 'plan' ? urlTab : 'plan');
+  const setTab = (next: Tab) => setTabOverride(next);
 
   // Plan tab state
   const [generating, setGenerating] = useState(false);
@@ -86,6 +95,8 @@ export default function WorkoutsPage() {
   useEffect(() => {
     fetchActivePlan();
   }, []);
+
+
 
   useEffect(() => {
     if (tab === 'cardio') fetchCardio();
@@ -542,9 +553,16 @@ export default function WorkoutsPage() {
             sessions.map(s => {
               const exCount = (s.exercises || []).length;
               const doneSets = (s.exercises || []).reduce((a, ex) => a + (ex.sets || []).filter(set => set.completed).length, 0);
+              const d = new Date(s.startedAt);
+              const localIso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+              const isHighlighted = !!highlightDate && localIso === highlightDate;
               return (
                 <div key={s.id} className="rounded-xl border p-5"
-                  style={{ background: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
+                  style={{
+                    background: 'var(--bg-card)',
+                    borderColor: isHighlighted ? '#22c55e' : 'var(--border-color)',
+                    boxShadow: isHighlighted ? '0 0 0 1px #22c55e' : undefined,
+                  }}>
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <h3 className="font-semibold" style={{ color: 'var(--text-primary)' }}>{s.name}</h3>
