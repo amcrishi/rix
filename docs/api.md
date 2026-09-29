@@ -145,6 +145,56 @@ Authorization: Bearer <token>
 
 ---
 
+### Workouts
+
+#### `GET /api/workouts/stats/reps` 🔒
+Aggregated rep counts and training volume, derived from the per-set reps logged
+by the live session tracker. Counts completed sets from completed workout
+sessions, plus manually created workout logs (session-generated logs are
+excluded so nothing is counted twice).
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "stats": {
+      "totalReps": 1840,
+      "repsThisWeek": 216,
+      "totalVolume": 47250,
+      "volumeThisWeek": 5400,
+      "totalSets": 212,
+      "bestSetReps": 20,
+      "perExercise": [
+        {
+          "name": "Barbell Bench Press",
+          "muscleGroup": "chest",
+          "totalReps": 240,
+          "totalSets": 30,
+          "totalVolume": 14400,
+          "bestSetReps": 12,
+          "lastPerformed": "2026-09-27T10:12:00.000Z"
+        }
+      ],
+      "weekly": [
+        { "weekStart": "2026-08-23T00:00:00.000Z", "label": "5w ago", "reps": 310, "volume": 8200 },
+        { "weekStart": "2026-09-27T00:00:00.000Z", "label": "This Week", "reps": 216, "volume": 5400 }
+      ]
+    }
+  }
+}
+```
+
+Volume is `weight x reps` in kg, rounded. Sets logged without a weight
+contribute reps but no volume.
+
+---
+
 ## Error Format
 
 All errors follow this structure:

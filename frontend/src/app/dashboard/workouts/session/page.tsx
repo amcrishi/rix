@@ -240,6 +240,13 @@ export default function SessionPage() {
   const completedSetsTotal = exercises.reduce((a, ex) => a + ex.sets.filter(s => s.completed).length, 0);
   const totalSetsTotal = exercises.reduce((a, ex) => a + ex.sets.length, 0);
 
+  // Reps actually performed, and volume (weight x reps), across completed sets
+  const completedSets = exercises.flatMap(ex => ex.sets.filter(s => s.completed));
+  const repsTotal = completedSets.reduce((a, s) => a + (parseInt(s.reps, 10) || 0), 0);
+  const volumeTotal = Math.round(completedSets.reduce(
+    (a, s) => a + (parseInt(s.reps, 10) || 0) * (parseFloat(s.weight) || 0), 0
+  ));
+
   // ── Render ────────────────────────────────────────
 
   // Done screen
@@ -252,7 +259,7 @@ export default function SessionPage() {
         <p className="mb-6" style={{ color: 'var(--text-secondary)' }}>
           Great job finishing {schedule[selectedDayIdx]?.day}!
         </p>
-        <div className="grid grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="rounded-xl border p-4" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
             <p className="text-2xl font-bold" style={{ color: 'var(--color-primary)' }}>{formatTime(elapsed)}</p>
             <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Duration</p>
@@ -262,8 +269,12 @@ export default function SessionPage() {
             <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Sets done</p>
           </div>
           <div className="rounded-xl border p-4" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
-            <p className="text-2xl font-bold" style={{ color: '#3b82f6' }}>{completedExercises.length}</p>
-            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Exercises</p>
+            <p className="text-2xl font-bold" style={{ color: '#3b82f6' }}>{repsTotal}</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Total reps</p>
+          </div>
+          <div className="rounded-xl border p-4" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
+            <p className="text-2xl font-bold" style={{ color: '#f59e0b' }}>{volumeTotal.toLocaleString()}</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Volume (kg)</p>
           </div>
         </div>
         <div className="space-y-3 mb-8 text-left">
@@ -276,10 +287,15 @@ export default function SessionPage() {
                   <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{ex.name}</p>
                   <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{ex.muscleGroup}</p>
                 </div>
-                <p className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>
-                  {doneSets.length} sets
-                  {doneSets[0]?.weight ? ` · ${doneSets[0].weight}kg` : ''}
-                </p>
+                <div className="text-right">
+                  <p className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>
+                    {doneSets.length} sets · {doneSets.reduce((a, s) => a + (parseInt(s.reps, 10) || 0), 0)} reps
+                  </p>
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    {doneSets.map(s => s.reps || 0).join(' · ')}
+                    {doneSets[0]?.weight ? ` @ ${doneSets[0].weight}kg` : ''}
+                  </p>
+                </div>
               </div>
             );
           })}

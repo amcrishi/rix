@@ -10,6 +10,7 @@ import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import ProgressBar from '@/components/ui/ProgressBar';
 import StatCard from '@/components/ui/StatCard';
+import type { RepStats } from '@/types';
 
 interface WorkoutLog { id: string; exercise: string; sets: number; reps: number; weight: number | null; duration: number | null; notes: string | null; loggedAt: string; }
 interface LogsResponse { logs: WorkoutLog[]; total: number; workoutsThisWeek: number; totalWorkouts: number; }
@@ -19,6 +20,7 @@ export default function ProgressPage() {
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
   const [stats, setStats] = useState({ workoutsThisWeek: 0, totalWorkouts: 0 });
   const [profile, setProfile] = useState<Profile>({});
+  const [repStats, setRepStats] = useState<RepStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -31,6 +33,9 @@ export default function ProgressPage() {
       }).catch(() => {}),
       api.get<{ user: unknown; profile: Profile | null }>('/profile').then(r => {
         if (r.data?.profile) setProfile(r.data.profile);
+      }).catch(() => {}),
+      api.get<{ stats: RepStats }>('/workouts/stats/reps').then(r => {
+        if (r.data?.stats) setRepStats(r.data.stats);
       }).catch(() => {}),
     ]).finally(() => setLoading(false));
   }, []);
@@ -137,6 +142,101 @@ export default function ProgressPage() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Rep Tracking */}
+        <div className="rounded-xl border p-6 shadow-sm lg:col-span-2" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
+          <div className="flex items-baseline justify-between mb-5">
+            <h2 className="font-semibold" style={{ color: 'var(--text-primary)' }}>Rep Tracking</h2>
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              Counted from completed sets
+            </span>
+          </div>
+
+          {!repStats || repStats.totalReps === 0 ? (
+            <div className="text-center py-8">
+              <div className="text-4xl mb-2">💪</div>
+              <p style={{ color: 'var(--text-secondary)' }}>
+                No reps counted yet. Log your sets in a live workout session to see totals here.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Totals */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                {[
+                  { label: 'Total Reps', value: repStats.totalReps.toLocaleString(), color: 'var(--color-primary)' },
+                  { label: 'Reps This Week', value: repStats.repsThisWeek.toLocaleString(), color: '#22c55e' },
+                  { label: 'Total Volume', value: `${repStats.totalVolume.toLocaleString()} kg`, color: '#3b82f6' },
+                  { label: 'Best Set', value: `${repStats.bestSetReps} reps`, color: '#f59e0b' },
+                ].map((tile) => (
+                  <div key={tile.label} className="rounded-lg border p-3"
+                    style={{ background: 'var(--bg-hover)', borderColor: 'var(--border-color)' }}>
+                    <p className="text-xl font-bold" style={{ color: tile.color }}>{tile.value}</p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{tile.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Weekly reps chart */}
+              <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-muted)' }}>
+                Reps per week
+              </p>
+              <div className="flex items-end gap-2 h-28 mb-6">
+                {repStats.weekly.map((week, i) => {
+                  const peak = Math.max(...repStats.weekly.map(w => w.reps), 1);
+                  return (
+                    <div key={week.weekStart} className="flex-1 flex flex-col items-center gap-1">
+                      <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>{week.reps}</span>
+                      <div className="w-full rounded-t-md transition-all"
+                        title={`${week.reps} reps · ${week.volume.toLocaleString()} kg volume`}
+                        style={{
+                          height: `${Math.max(4, (week.reps / peak) * 80)}px`,
+                          background: i === repStats.weekly.length - 1 ? 'var(--color-primary)' : 'var(--color-primary-light)',
+                        }} />
+                      <span className="text-xs text-center leading-tight" style={{ color: 'var(--text-muted)' }}>{week.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Per-exercise breakdown */}
+              <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-muted)' }}>
+                Reps by exercise
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left border-b" style={{ borderColor: 'var(--border-color)' }}>
+                      <th className="pb-2 font-medium" style={{ color: 'var(--text-secondary)' }}>Exercise</th>
+                      <th className="pb-2 font-medium text-right" style={{ color: 'var(--text-secondary)' }}>Sets</th>
+                      <th className="pb-2 font-medium text-right" style={{ color: 'var(--text-secondary)' }}>Reps</th>
+                      <th className="pb-2 font-medium text-right" style={{ color: 'var(--text-secondary)' }}>Best Set</th>
+                      <th className="pb-2 font-medium text-right" style={{ color: 'var(--text-secondary)' }}>Volume</th>
+                      <th className="pb-2 font-medium text-right" style={{ color: 'var(--text-secondary)' }}>Last</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {repStats.perExercise.map((ex) => (
+                      <tr key={ex.name} className="border-b" style={{ borderColor: 'var(--border-color)' }}>
+                        <td className="py-2.5 font-medium" style={{ color: 'var(--text-primary)' }}>
+                          {ex.name}
+                          {ex.muscleGroup && (
+                            <span className="block text-xs font-normal" style={{ color: 'var(--text-muted)' }}>{ex.muscleGroup}</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 text-right" style={{ color: 'var(--text-secondary)' }}>{ex.totalSets}</td>
+                        <td className="py-2.5 text-right font-semibold" style={{ color: 'var(--text-primary)' }}>{ex.totalReps.toLocaleString()}</td>
+                        <td className="py-2.5 text-right" style={{ color: 'var(--text-secondary)' }}>{ex.bestSetReps}</td>
+                        <td className="py-2.5 text-right" style={{ color: 'var(--text-secondary)' }}>{ex.totalVolume ? `${ex.totalVolume.toLocaleString()} kg` : '—'}</td>
+                        <td className="py-2.5 text-right" style={{ color: 'var(--text-muted)' }}>{new Date(ex.lastPerformed).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Recent Workout Logs */}

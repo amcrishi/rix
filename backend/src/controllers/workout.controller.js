@@ -5,6 +5,7 @@
 
 const { asyncHandler } = require('../utils/asyncHandler');
 const workoutService = require('../services/workout.service');
+const repStatsService = require('../services/repStats.service');
 const prisma = require('../config/database');
 
 /**
@@ -268,6 +269,15 @@ const getSessionById = asyncHandler(async (req, res) => {
   res.json({ success: true, data: { session } });
 });
 
+/**
+ * GET /api/workouts/stats/reps
+ * Aggregated rep counts, volume and per-exercise breakdown.
+ */
+const getRepStats = asyncHandler(async (req, res) => {
+  const stats = await repStatsService.getRepStats(req.user.id);
+  res.json({ success: true, data: { stats } });
+});
+
 // ─────────────────────────────────────────────
 // CARDIO SESSIONS
 // ─────────────────────────────────────────────
@@ -321,4 +331,4 @@ const getCardioSessions = asyncHandler(async (req, res) => {
   res.json({ success: true, data: { sessions, total, page } });
 });
 
-module.exports = { generatePlan, getActivePlan, getAllPlans, getPlanById, deletePlan, getWorkoutLogs, createWorkoutLog, startSession, updateSession, getSessions, getSessionById, logCardio, getCardioSessions };
+module.exports = { generatePlan, getActivePlan, getAllPlans, getPlanById, deletePlan, getWorkoutLogs, createWorkoutLog, startSession, updateSession, getSessions, getSessionById, getRepStats, logCardio, getCardioSessions };

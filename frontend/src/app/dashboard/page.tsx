@@ -14,7 +14,7 @@ import ProgressBar from '@/components/ui/ProgressBar';
 import TodayWorkout from '@/components/dashboard/TodayWorkout';
 import RecentActivity from '@/components/dashboard/RecentActivity';
 import WeeklyOverview from '@/components/dashboard/WeeklyOverview';
-import { WorkoutLog, WorkoutDay } from '@/types';
+import { WorkoutLog, WorkoutDay, RepStats } from '@/types';
 
 const MOTIVATIONAL_QUOTES = [
   { text: "The only bad workout is the one that didn't happen.", author: "Unknown" },
@@ -89,6 +89,7 @@ export default function DashboardPage() {
   const [activePlan, setActivePlan] = useState<ActivePlanShape | null>(null);
   const [allLogs, setAllLogs] = useState<WorkoutLog[]>([]);
   const [waterGlasses, setWaterGlasses] = useState(0);
+  const [repStats, setRepStats] = useState<RepStats | null>(null);
 
   useEffect(() => {
     setWaterGlasses(loadWaterToday());
@@ -104,6 +105,9 @@ export default function DashboardPage() {
         .catch(() => {}),
       api.get<{ plan: ActivePlanShape }>('/workouts/active')
         .then(r => { if (r.data?.plan) setActivePlan(r.data.plan); })
+        .catch(() => {}),
+      api.get<{ stats: RepStats }>('/workouts/stats/reps')
+        .then(r => { if (r.data?.stats) setRepStats(r.data.stats); })
         .catch(() => {}),
     ]);
   }, []);
@@ -230,9 +234,9 @@ export default function DashboardPage() {
         </span>
       </div>
 
-      {/* Stats Grid — 4 columns, editorial */}
+      {/* Stats Grid — 5 columns, editorial */}
       <div
-        className="grid grid-cols-2 lg:grid-cols-4"
+        className="grid grid-cols-2 lg:grid-cols-5"
         style={{ borderBottom: `1px solid ${borderColor}`, background: cardBg, backdropFilter: cardBackdrop }}
       >
         <StatCard label="Current Weight" value={profileData?.weight ?? '—'} unit={profileData?.weight ? 'kg' : ''} />
@@ -241,6 +245,9 @@ export default function DashboardPage() {
           trendValue={profileData?.daysPerWeek ? `Target ${profileData.daysPerWeek}/wk` : undefined} />
         <StatCard label="Total Sessions" value={logsStats.totalWorkouts}
           trendValue={logsStats.totalWorkouts > 0 ? 'All time' : undefined} />
+        <StatCard label="Reps This Week" value={repStats?.repsThisWeek ?? 0} unit="reps"
+          trend={repStats && repStats.repsThisWeek > 0 ? 'up' : undefined}
+          trendValue={repStats && repStats.totalReps > 0 ? `${repStats.totalReps.toLocaleString()} all time` : undefined} />
         <StatCard label="Streak" value={streak} unit={streak !== 1 ? 'days' : 'day'}
           trend={streak > 1 ? 'up' : undefined} trendValue={streak > 2 ? 'Keep going' : streak > 0 ? 'Great start' : undefined} />
       </div>

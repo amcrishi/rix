@@ -74,3 +74,31 @@ export interface ProgressStats {
   streak: number;
   goalProgress: number;
 }
+
+export interface ExerciseRepStats {
+  name: string;
+  muscleGroup: string | null;
+  totalReps: number;
+  totalSets: number;
+  totalVolume: number;
+  bestSetReps: number;
+  lastPerformed: string;
+}
+
+export interface RepWeek {
+  weekStart: string;
+  label: string;
+  reps: number;
+  volume: number;
+}
+
+export interface RepStats {
+  totalReps: number;
+  repsThisWeek: number;
+  totalVolume: number;
+  volumeThisWeek: number;
+  totalSets: number;
+  bestSetReps: number;
+  perExercise: ExerciseRepStats[];
+  weekly: RepWeek[];
+}
