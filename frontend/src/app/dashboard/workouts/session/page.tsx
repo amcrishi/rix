@@ -12,7 +12,9 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { createPortal } from 'react-dom';
 import { api } from '@/lib/api';
+import { canStartDay, dayStatus, planDayDate, formatDayDate, todayDayIndex, localTzOffsetMinutes } from '@/lib/schedule';
 
 // ─── Types ───────────────────────────────────────────
 
@@ -66,6 +68,7 @@ interface ActivePlan {
   planData: {
     weeklySchedule?: WorkoutDay[];
     schedule?: WorkoutDay[];
+    weekAnchor?: string;
   };
 }
 
@@ -127,6 +130,9 @@ export default function SessionPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [lastPerf, setLastPerf] = useState<Record<string, LastPerformance>>({});
   const [lastPerfError, setLastPerfError] = useState('');
+  const [startError, setStartError] = useState('');
+  // Day whose exercises are shown in the slide-over; null when closed.
+  const [previewDayIdx, setPreviewDayIdx] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState(0); // seconds
   const [saving, setSaving] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -140,6 +146,20 @@ export default function SessionPage() {
       setActivePlan(plan);
       const days = plan.planData?.weeklySchedule || plan.planData?.schedule || [];
       setSchedule(days);
+
+      // Open on today's session if there is one, else the most recent
+      // startable day, so the user isn't staring at a locked day.
+      const anchorIso = plan.planData?.weekAnchor;
+      const todayIdx = todayDayIndex(days.length, { anchorIso });
+      if (todayIdx >= 0) {
+        setSelectedDayIdx(todayIdx);
+      } else {
+        let fallback = 0;
+        for (let i = 0; i < days.length; i++) {
+          if (canStartDay(i, { anchorIso })) fallback = i;
+        }
+        setSelectedDayIdx(fallback);
+      }
     }).catch(() => {});
 
     // What we lifted last time, per exercise — the numbers to beat.
@@ -170,6 +190,8 @@ export default function SessionPage() {
   const handleStart = async () => {
     const day = schedule[selectedDayIdx];
     if (!day) return;
+    // Future days are view-only. The server enforces this too.
+    if (!canStartDay(selectedDayIdx, { anchorIso: activePlan?.planData?.weekAnchor })) return;
 
     const sessionExercises: SessionExercise[] = day.exercises.map(ex => ({
       name: ex.name,
@@ -194,9 +216,19 @@ export default function SessionPage() {
         planDayIndex: selectedDayIdx,
         name: `${day.day} – ${day.focus}`,
         exercises: sessionExercises,
+        tzOffsetMinutes: localTzOffsetMinutes(),
       });
       setSessionId(res.data?.session?.id || null);
-    } catch { /* continue even if DB fails */ }
+    } catch (err) {
+      // A rejected start (e.g. the day is locked) must not drop the user
+      // into a session the server has no record of.
+      const e = err as { status?: number; message?: string };
+      if (e?.status === 403) {
+        setStartError(e.message || 'This workout can only be started on its scheduled day.');
+        return;
+      }
+      // Any other failure (offline, server down) still allows local logging.
+    }
 
     setPhase('active');
     setActiveExerciseIdx(0);
@@ -232,6 +264,25 @@ export default function SessionPage() {
       return { ...ex, sets: ex.sets.map((s, si) => si === setIdx ? { ...s, [field]: value } : s) };
     }));
   };
+
+  // Close the preview on Escape, and stop the page scrolling behind it.
+  useEffect(() => {
+    if (previewDayIdx === null) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPreviewDayIdx(null); };
+    window.addEventListener('keydown', onKey);
+    // The dashboard scrolls <main>, not <body>, so lock both.
+    const main = document.querySelector('main');
+    const previousBody = document.body.style.overflow;
+    const previousMain = main?.style.overflow ?? '';
+    document.body.style.overflow = 'hidden';
+    if (main) main.style.overflow = 'hidden';
+
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previousBody;
+      if (main) main.style.overflow = previousMain;
+    };
+  }, [previewDayIdx]);
 
   const handleRestDone = useCallback(() => {
     setRestTimer({ active: false, seconds: 60 });
@@ -366,42 +417,188 @@ export default function SessionPage() {
             </div>
 
             <div className="space-y-3 mb-6">
-              {schedule.map((day, i) => (
-                <button key={i} onClick={() => setSelectedDayIdx(i)}
+              {schedule.map((day, i) => {
+                const anchorIso = activePlan?.planData?.weekAnchor;
+                const status = dayStatus(i, { anchorIso });
+                const locked = status === 'future';
+                const scheduledFor = formatDayDate(planDayDate(i, { anchorIso }));
+                return (
+                <button key={i} onClick={() => { setSelectedDayIdx(i); setPreviewDayIdx(i); }}
                   className="w-full text-left rounded-xl border p-4 transition-all"
                   style={{
                     background: selectedDayIdx === i ? 'rgba(255,255,255,0.06)' : 'var(--bg-card)',
                     borderColor: selectedDayIdx === i ? '#fff' : 'var(--border-color)',
                   }}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
-                        style={{
-                          background: selectedDayIdx === i ? '#fff' : 'var(--bg-hover)',
-                          color: selectedDayIdx === i ? '#000' : 'var(--text-secondary)',
-                        }}>
-                        {i + 1}
-                      </span>
-                      <div>
-                        <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{day.day}</p>
-                        <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{day.focus}</p>
-                      </div>
-                    </div>
-                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                      {day.exercises.length} exercises
+                  <div className="flex items-center gap-3">
+                    <span className="w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center text-xs font-bold"
+                      style={{
+                        background: selectedDayIdx === i ? '#fff' : 'var(--bg-hover)',
+                        color: selectedDayIdx === i ? '#000' : 'var(--text-secondary)',
+                      }}>
+                      {i + 1}
                     </span>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
+                        {day.day}
+                      </p>
+                      <p className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>{day.focus}</p>
+                    </div>
+
+                    <div className="flex-shrink-0 text-right">
+                      <span className="text-[11px] block whitespace-nowrap font-medium"
+                        style={{ color: status === 'today' ? '#22c55e' : 'var(--text-muted)' }}>
+                        {locked ? `🔒 ${scheduledFor}` : status === 'today' ? 'Today' : scheduledFor}
+                      </span>
+                      <span className="text-[11px] block mt-0.5 whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>
+                        {day.exercises.length} exercises
+                      </span>
+                    </div>
                   </div>
                 </button>
-              ))}
+                );
+              })}
             </div>
 
-            <button onClick={handleStart} disabled={schedule.length === 0}
-              className="w-full py-3 rounded-xl text-black font-semibold text-base transition-all hover:scale-[1.02] disabled:opacity-50 uppercase tracking-wider"
-              style={{ background: '#fff' }}>
-              🏋️ Start — {schedule[selectedDayIdx]?.day || 'Select a day'}
-            </button>
+            {(() => {
+              const anchorIso = activePlan?.planData?.weekAnchor;
+              const selectedLocked = schedule.length > 0 && !canStartDay(selectedDayIdx, { anchorIso });
+              const scheduledFor = schedule.length > 0
+                ? formatDayDate(planDayDate(selectedDayIdx, { anchorIso }))
+                : '';
+
+              return (
+                <>
+                  {startError && (
+                    <p className="text-sm mb-3 rounded-lg px-3 py-2"
+                      style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.3)', color: '#f87171' }}>
+                      {startError}
+                    </p>
+                  )}
+
+                  <button onClick={handleStart} disabled={schedule.length === 0 || selectedLocked}
+                    className="w-full py-3 rounded-xl text-black font-semibold text-base transition-all hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed uppercase tracking-wider"
+                    style={{ background: '#fff' }}>
+                    {selectedLocked
+                      ? `🔒 Opens ${scheduledFor}`
+                      : `🏋️ Start — ${schedule[selectedDayIdx]?.day || 'Select a day'}`}
+                  </button>
+
+                  {selectedLocked && (
+                    <p className="text-xs text-center mt-3" style={{ color: 'var(--text-muted)' }}>
+                      You can review this workout now — it can only be started on its scheduled day.
+                    </p>
+                  )}
+                </>
+              );
+            })()}
           </>
         )}
+
+        {/* Slide-over: full workout for the chosen day, locked or not.
+            Portalled to <body> because the dashboard's <main> is z-10 and the
+            nav is z-20 — a fixed panel rendered inside main sits under it. */}
+        {(() => {
+          const idx = previewDayIdx;
+          if (idx === null || typeof document === 'undefined') return null;
+          const day = schedule[idx];
+          if (!day) return null;
+
+          const anchorIso = activePlan?.planData?.weekAnchor;
+          const status = dayStatus(idx, { anchorIso });
+          const locked = status === 'future';
+          const scheduledFor = formatDayDate(planDayDate(idx, { anchorIso }));
+          const totalSets = day.exercises.reduce((a, ex) => a + (ex.sets || 0), 0);
+
+          return createPortal(
+            <div className="fixed inset-0 z-[100] flex justify-end">
+              <div
+                onClick={() => setPreviewDayIdx(null)}
+                className="absolute inset-0"
+                style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(2px)' }}
+                aria-hidden="true"
+              />
+
+              <aside
+                role="dialog"
+                aria-modal="true"
+                aria-label={`${day.day} — ${day.focus}`}
+                className="relative flex flex-col h-full w-full sm:max-w-[420px] animate-[slideIn_.22s_ease-out]"
+                style={{
+                  background: 'var(--bg-card)',
+                  borderLeft: '1px solid var(--border-color)',
+                  boxShadow: '-16px 0 40px rgba(0,0,0,0.45)',
+                }}
+              >
+                <header className="flex-shrink-0 flex items-start gap-3 px-5 py-4"
+                  style={{ borderBottom: '1px solid var(--border-color)' }}>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-lg font-bold leading-tight truncate" style={{ color: 'var(--text-primary)' }}>
+                      {day.day}
+                    </h2>
+                    <p className="text-sm truncate" style={{ color: 'var(--text-secondary)' }}>{day.focus}</p>
+                    <p className="text-xs mt-1.5"
+                      style={{ color: status === 'today' ? '#22c55e' : 'var(--text-muted)' }}>
+                      {locked ? `🔒 ${scheduledFor}` : status === 'today' ? 'Today' : scheduledFor}
+                      <span style={{ color: 'var(--text-muted)' }}>
+                        {' · '}{day.exercises.length} exercises{' · '}{totalSets} sets
+                      </span>
+                    </p>
+                  </div>
+                  <button onClick={() => setPreviewDayIdx(null)} aria-label="Close"
+                    className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center text-xl leading-none"
+                    style={{ background: 'var(--bg-hover)', color: 'var(--text-secondary)' }}>
+                    ×
+                  </button>
+                </header>
+
+                <div className="flex-1 overflow-y-auto overscroll-contain px-5">
+                  {day.exercises.map((ex, i) => (
+                    <div key={i} className="flex items-start justify-between gap-3 py-3"
+                      style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium leading-snug" style={{ color: 'var(--text-primary)' }}>
+                          {ex.name}
+                        </p>
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                          {ex.muscleGroup}{ex.equipment ? ` · ${ex.equipment}` : ''}
+                        </p>
+                      </div>
+                      <div className="flex-shrink-0 text-right">
+                        <p className="text-sm font-semibold whitespace-nowrap" style={{ color: 'var(--text-secondary)' }}>
+                          {ex.sets} × {ex.reps}
+                        </p>
+                        <p className="text-xs whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>
+                          {ex.restSeconds}s rest
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <footer className="flex-shrink-0 px-5 pt-4"
+                  style={{
+                    borderTop: '1px solid var(--border-color)',
+                    paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))',
+                  }}>
+                  <button
+                    onClick={() => { setPreviewDayIdx(null); handleStart(); }}
+                    disabled={locked}
+                    className="w-full py-3 rounded-xl text-black font-semibold text-sm uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ background: '#fff' }}>
+                    {locked ? `🔒 Opens ${scheduledFor}` : `🏋️ Start ${day.day}`}
+                  </button>
+                  {locked && (
+                    <p className="text-xs text-center mt-2.5 leading-snug" style={{ color: 'var(--text-muted)' }}>
+                      Review it now — it can only be started on its scheduled day.
+                    </p>
+                  )}
+                </footer>
+              </aside>
+            </div>,
+            document.body
+          );
+        })()}
       </div>
     );
   }

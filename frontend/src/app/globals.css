@@ -148,3 +148,16 @@ body {
   animation: spin 1s linear infinite;
 }
 
+
+/* Slide-over panel (workout day preview) */
+@keyframes slideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes slideIn {
+    from { transform: none; }
+    to { transform: none; }
+  }
+}
