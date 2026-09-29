@@ -14,7 +14,7 @@ import ProgressBar from '@/components/ui/ProgressBar';
 import TodayWorkout from '@/components/dashboard/TodayWorkout';
 import RecentActivity from '@/components/dashboard/RecentActivity';
 import WeeklyOverview from '@/components/dashboard/WeeklyOverview';
-import { WorkoutLog, WorkoutDay, RepStats } from '@/types';
+import { WorkoutLog, WorkoutDay, RepStats, MuscleWindow } from '@/types';
 
 const MOTIVATIONAL_QUOTES = [
   { text: "The only bad workout is the one that didn't happen.", author: "Unknown" },
@@ -90,6 +90,8 @@ export default function DashboardPage() {
   const [allLogs, setAllLogs] = useState<WorkoutLog[]>([]);
   const [waterGlasses, setWaterGlasses] = useState(0);
   const [repStats, setRepStats] = useState<RepStats | null>(null);
+  const [muscleWindows, setMuscleWindows] = useState<MuscleWindow[]>([]);
+  const [muscleRange, setMuscleRange] = useState(1); // default: 7 days
 
   useEffect(() => {
     setWaterGlasses(loadWaterToday());
@@ -108,6 +110,9 @@ export default function DashboardPage() {
         .catch(() => {}),
       api.get<{ stats: RepStats }>('/workouts/stats/reps')
         .then(r => { if (r.data?.stats) setRepStats(r.data.stats); })
+        .catch(() => {}),
+      api.get<{ windows: MuscleWindow[] }>('/workouts/stats/muscle-volume')
+        .then(r => { if (r.data?.windows) setMuscleWindows(r.data.windows); })
         .catch(() => {}),
     ]);
   }, []);
@@ -234,9 +239,9 @@ export default function DashboardPage() {
         </span>
       </div>
 
-      {/* Stats Grid — 5 columns, editorial */}
+      {/* Stats Grid — 4 columns, editorial */}
       <div
-        className="grid grid-cols-2 lg:grid-cols-5"
+        className="grid grid-cols-2 lg:grid-cols-4"
         style={{ borderBottom: `1px solid ${borderColor}`, background: cardBg, backdropFilter: cardBackdrop }}
       >
         <StatCard label="Current Weight" value={profileData?.weight ?? '—'} unit={profileData?.weight ? 'kg' : ''} />
@@ -245,9 +250,6 @@ export default function DashboardPage() {
           trendValue={profileData?.daysPerWeek ? `Target ${profileData.daysPerWeek}/wk` : undefined} />
         <StatCard label="Total Sessions" value={logsStats.totalWorkouts}
           trendValue={logsStats.totalWorkouts > 0 ? 'All time' : undefined} />
-        <StatCard label="Reps This Week" value={repStats?.repsThisWeek ?? 0} unit="reps"
-          trend={repStats && repStats.repsThisWeek > 0 ? 'up' : undefined}
-          trendValue={repStats && repStats.totalReps > 0 ? `${repStats.totalReps.toLocaleString()} all time` : undefined} />
         <StatCard label="Streak" value={streak} unit={streak !== 1 ? 'days' : 'day'}
           trend={streak > 1 ? 'up' : undefined} trendValue={streak > 2 ? 'Keep going' : streak > 0 ? 'Great start' : undefined} />
       </div>
@@ -323,6 +325,69 @@ export default function DashboardPage() {
             <p className="text-[11px] tracking-[0.2em] uppercase text-white opacity-55">Add metrics in Profile</p>
           )}
         </div>
+      </div>
+
+      {/* Muscle Group Training Volume */}
+      <div
+        className="px-4 py-6 md:px-12 md:py-8"
+        style={{ borderBottom: `1px solid ${borderColor}`, background: cardBg, backdropFilter: cardBackdrop }}
+      >
+        <div className="flex items-center justify-between mb-6">
+          <p className="text-[9px] tracking-[0.3em] uppercase font-semibold text-white opacity-50">
+            Muscle Group Volume
+          </p>
+          <div className="flex gap-1">
+            {muscleWindows.map((w, i) => (
+              <button key={w.key} onClick={() => setMuscleRange(i)}
+                className="px-2.5 py-1 text-[9px] tracking-[0.15em] uppercase font-semibold transition-all"
+                style={{
+                  background: i === muscleRange ? '#fff' : 'transparent',
+                  color: i === muscleRange ? '#000' : 'rgba(255,255,255,0.5)',
+                  border: `1px solid ${i === muscleRange ? '#fff' : borderColor}`,
+                }}>
+                {w.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {(() => {
+          const win = muscleWindows[muscleRange];
+          if (!win || win.totalSets === 0) {
+            return (
+              <p className="text-[11px] tracking-[0.2em] uppercase text-white opacity-55">
+                {muscleWindows.length === 0
+                  ? 'No training data yet'
+                  : `Nothing logged in the last ${win?.label.toLowerCase() || 'period'}`}
+              </p>
+            );
+          }
+          const peak = Math.max(...win.groups.map(g => g.sets), 1);
+          return (
+            <>
+              <div className="space-y-3">
+                {win.groups.map(g => (
+                  <div key={g.muscleGroup} className="flex items-center gap-3">
+                    <span className="w-20 md:w-28 flex-shrink-0 text-[10px] tracking-[0.2em] uppercase font-semibold text-white opacity-70">
+                      {g.muscleGroup}
+                    </span>
+                    <div className="flex-1 h-6 relative" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                      <div className="h-full transition-all duration-500"
+                        style={{ width: `${(g.sets / peak) * 100}%`, background: 'rgba(255,255,255,0.85)' }} />
+                    </div>
+                    <span className="w-24 md:w-32 flex-shrink-0 text-right text-[10px] tracking-[0.1em] uppercase"
+                      style={{ color: mutedColor }}>
+                      <span className="text-white font-bold text-sm">{g.sets}</span> sets · {g.reps} reps
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-5 text-[9px] tracking-[0.2em] uppercase" style={{ color: mutedColor }}>
+                {win.totalSets} sets across {win.groups.length} muscle {win.groups.length === 1 ? 'group' : 'groups'}
+              </p>
+            </>
+          );
+        })()}
       </div>
 
       {/* Goal Progress */}

@@ -102,3 +102,19 @@ export interface RepStats {
   perExercise: ExerciseRepStats[];
   weekly: RepWeek[];
 }
+
+export interface MuscleGroupStat {
+  muscleGroup: string;
+  sets: number;
+  reps: number;
+  volume: number;
+  exercises: number;
+}
+
+export interface MuscleWindow {
+  key: string;
+  label: string;
+  days: number;
+  totalSets: number;
+  groups: MuscleGroupStat[];
+}

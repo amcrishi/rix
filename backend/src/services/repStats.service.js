@@ -11,9 +11,37 @@
  */
 
 const prisma = require('../config/database');
+const exerciseLibrary = require('./exercises.data');
 
 const WEEKS_IN_SERIES = 6;
 const SESSION_LOG_NOTE_PREFIX = 'Session: ';
+
+// Trailing windows, so results never depend on the server's timezone.
+const MUSCLE_WINDOWS = [
+  { key: '24h', label: '24 Hours', days: 1 },
+  { key: '7d', label: '7 Days', days: 7 },
+  { key: '30d', label: '30 Days', days: 30 },
+];
+
+/**
+ * Exercise name -> muscle group, built from the exercise library.
+ * Used for manual logs, which carry no muscle group of their own.
+ */
+const MUSCLE_BY_EXERCISE = (() => {
+  const map = {};
+  for (const [group, list] of Object.entries(exerciseLibrary)) {
+    for (const ex of list) map[ex.name.toLowerCase()] = group;
+  }
+  return map;
+})();
+
+/**
+ * Resolve an exercise's muscle group, falling back to the library by name.
+ * @param {string} name
+ * @param {string} [explicit] - group recorded on the session exercise
+ */
+const resolveMuscleGroup = (name, explicit) =>
+  explicit || MUSCLE_BY_EXERCISE[(name || '').toLowerCase()] || 'other';
 
 /**
  * Start of the week (Sunday, local midnight) containing `date`.
@@ -59,7 +87,7 @@ const collectEntries = (sessions, logs) => {
         if (reps <= 0) continue;
         entries.push({
           name: ex.name || 'Unknown exercise',
-          muscleGroup: ex.muscleGroup || null,
+          muscleGroup: resolveMuscleGroup(ex.name, ex.muscleGroup),
           reps,
           volume,
           performedAt: set.completedAt ? new Date(set.completedAt) : new Date(performedAt),
@@ -79,7 +107,7 @@ const collectEntries = (sessions, logs) => {
     for (let i = 0; i < sets; i++) {
       entries.push({
         name: log.exercise,
-        muscleGroup: null,
+        muscleGroup: resolveMuscleGroup(log.exercise),
         reps,
         volume: reps * (log.weight || 0),
         performedAt: new Date(log.loggedAt),
@@ -207,4 +235,63 @@ const getRepStats = async (userId) => {
   };
 };
 
-module.exports = { getRepStats };
+/**
+ * Sets, reps and volume per muscle group over trailing windows.
+ * Answers "what have I actually trained lately, and what am I neglecting?".
+ *
+ * @param {string} userId
+ * @returns {Object} { windows: [{ key, label, days, totalSets, groups: [...] }] }
+ */
+const getMuscleBreakdown = async (userId) => {
+  const [sessions, logs] = await Promise.all([
+    prisma.workoutSession.findMany({
+      where: { userId, status: 'completed' },
+      orderBy: { startedAt: 'desc' },
+    }),
+    prisma.workoutLog.findMany({
+      where: { userId },
+      orderBy: { loggedAt: 'desc' },
+    }),
+  ]);
+
+  const entries = collectEntries(sessions, logs);
+  const now = Date.now();
+
+  const windows = MUSCLE_WINDOWS.map(({ key, label, days }) => {
+    const cutoff = now - days * 86400000;
+    const byGroup = new Map();
+    let totalSets = 0;
+
+    for (const entry of entries) {
+      if (entry.performedAt.getTime() < cutoff) continue;
+
+      const group = entry.muscleGroup || 'other';
+      let row = byGroup.get(group);
+      if (!row) {
+        row = { muscleGroup: group, sets: 0, reps: 0, volume: 0, exercises: new Set() };
+        byGroup.set(group, row);
+      }
+      row.sets += 1;
+      row.reps += entry.reps;
+      row.volume += entry.volume;
+      row.exercises.add(entry.name);
+      totalSets += 1;
+    }
+
+    const groups = [...byGroup.values()]
+      .map((row) => ({
+        muscleGroup: row.muscleGroup,
+        sets: row.sets,
+        reps: row.reps,
+        volume: Math.round(row.volume),
+        exercises: row.exercises.size,
+      }))
+      .sort((a, b) => b.sets - a.sets);
+
+    return { key, label, days, totalSets, groups };
+  });
+
+  return { windows };
+};
+
+module.exports = { getRepStats, getMuscleBreakdown };

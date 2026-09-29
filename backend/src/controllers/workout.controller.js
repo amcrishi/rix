@@ -292,6 +292,15 @@ const getLastPerformance = asyncHandler(async (req, res) => {
   res.json({ success: true, data: { lastPerformance } });
 });
 
+/**
+ * GET /api/workouts/stats/muscle-volume
+ * Sets/reps/volume per muscle group over trailing 24h, 7d and 30d windows.
+ */
+const getMuscleBreakdown = asyncHandler(async (req, res) => {
+  const breakdown = await repStatsService.getMuscleBreakdown(req.user.id);
+  res.json({ success: true, data: breakdown });
+});
+
 // ─────────────────────────────────────────────
 // CARDIO SESSIONS
 // ─────────────────────────────────────────────
@@ -345,4 +354,4 @@ const getCardioSessions = asyncHandler(async (req, res) => {
   res.json({ success: true, data: { sessions, total, page } });
 });
 
-module.exports = { generatePlan, getActivePlan, getAllPlans, getPlanById, deletePlan, getWorkoutLogs, createWorkoutLog, startSession, updateSession, getSessions, getSessionById, getRepStats, getLastPerformance, logCardio, getCardioSessions };
+module.exports = { generatePlan, getActivePlan, getAllPlans, getPlanById, deletePlan, getWorkoutLogs, createWorkoutLog, startSession, updateSession, getSessions, getSessionById, getRepStats, getLastPerformance, getMuscleBreakdown, logCardio, getCardioSessions };

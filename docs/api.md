@@ -193,6 +193,60 @@ Authorization: Bearer <token>
 Volume is `weight x reps` in kg, rounded. Sets logged without a weight
 contribute reps but no volume.
 
+#### `GET /api/workouts/stats/last-performance` 🔒
+What the user did last time for each exercise — the reference for progressive
+overload. Only completed sessions count; an abandoned session is not a
+benchmark. Optional `?exclude=<sessionId>` ignores the session in progress.
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "lastPerformance": {
+      "Barbell Bench Press": {
+        "performedAt": "2026-09-27T10:12:00.000Z",
+        "sessionName": "Day 1 - Chest & Triceps",
+        "sets": [{ "weight": 60, "reps": 10 }, { "weight": 65, "reps": 6 }],
+        "topSetWeight": 65,
+        "topSetReps": 6,
+        "totalReps": 16,
+        "totalVolume": 990
+      }
+    }
+  }
+}
+```
+
+Top set is the heaviest; ties are broken by reps, so 60kg x 10 beats 60kg x 8.
+
+#### `GET /api/workouts/stats/muscle-volume` 🔒
+Sets, reps and volume per muscle group over trailing 24h / 7d / 30d windows.
+Windows are trailing rather than calendar-aligned, so results do not depend on
+the server's timezone. Manual logs carry no muscle group, so it is resolved
+from the exercise library by name, falling back to `other`.
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "windows": [
+      {
+        "key": "7d",
+        "label": "7 Days",
+        "days": 7,
+        "totalSets": 24,
+        "groups": [
+          { "muscleGroup": "chest", "sets": 9, "reps": 78, "volume": 4120, "exercises": 3 },
+          { "muscleGroup": "back", "sets": 6, "reps": 60, "volume": 2400, "exercises": 2 }
+        ]
+      }
+    ]
+  }
+}
+```
+
 ---
 
 ## Error Format
