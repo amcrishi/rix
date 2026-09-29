@@ -18,6 +18,7 @@ const {
   getSessions,
   getSessionById,
   getRepStats,
+  getLastPerformance,
   logCardio,
   getCardioSessions,
 } = require('../controllers/workout.controller');
@@ -40,6 +41,7 @@ router.patch('/sessions/:id', updateSession);
 
 // ── Stats (keep before /:id) ─────────────────────────
 router.get('/stats/reps', getRepStats);
+router.get('/stats/last-performance', getLastPerformance);
 
 // ── Cardio ───────────────────────────────────────────
 router.get('/cardio', getCardioSessions);

@@ -6,6 +6,7 @@
 const { asyncHandler } = require('../utils/asyncHandler');
 const workoutService = require('../services/workout.service');
 const repStatsService = require('../services/repStats.service');
+const progressionService = require('../services/progression.service');
 const prisma = require('../config/database');
 
 /**
@@ -278,6 +279,19 @@ const getRepStats = asyncHandler(async (req, res) => {
   res.json({ success: true, data: { stats } });
 });
 
+/**
+ * GET /api/workouts/stats/last-performance
+ * What the user did last time for each exercise — the numbers to beat.
+ * Optional ?exclude=<sessionId> to ignore the session in progress.
+ */
+const getLastPerformance = asyncHandler(async (req, res) => {
+  const lastPerformance = await progressionService.getLastPerformance(
+    req.user.id,
+    req.query.exclude
+  );
+  res.json({ success: true, data: { lastPerformance } });
+});
+
 // ─────────────────────────────────────────────
 // CARDIO SESSIONS
 // ─────────────────────────────────────────────
@@ -331,4 +345,4 @@ const getCardioSessions = asyncHandler(async (req, res) => {
   res.json({ success: true, data: { sessions, total, page } });
 });
 
-module.exports = { generatePlan, getActivePlan, getAllPlans, getPlanById, deletePlan, getWorkoutLogs, createWorkoutLog, startSession, updateSession, getSessions, getSessionById, getRepStats, logCardio, getCardioSessions };
+module.exports = { generatePlan, getActivePlan, getAllPlans, getPlanById, deletePlan, getWorkoutLogs, createWorkoutLog, startSession, updateSession, getSessions, getSessionById, getRepStats, getLastPerformance, logCardio, getCardioSessions };

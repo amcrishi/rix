@@ -49,6 +49,16 @@ interface SessionExercise {
   sets: SetLog[];
 }
 
+interface LastPerformance {
+  performedAt: string;
+  sessionName: string;
+  sets: { weight: number; reps: number }[];
+  topSetWeight: number;
+  topSetReps: number;
+  totalReps: number;
+  totalVolume: number;
+}
+
 interface ActivePlan {
   id: string;
   name: string;
@@ -115,6 +125,7 @@ export default function SessionPage() {
   const [restTimer, setRestTimer] = useState<{ active: boolean; seconds: number }>({ active: false, seconds: 60 });
 
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [lastPerf, setLastPerf] = useState<Record<string, LastPerformance>>({});
   const [elapsed, setElapsed] = useState(0); // seconds
   const [saving, setSaving] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -129,6 +140,11 @@ export default function SessionPage() {
       const days = plan.planData?.weeklySchedule || plan.planData?.schedule || [];
       setSchedule(days);
     }).catch(() => {});
+
+    // What we lifted last time, per exercise — the numbers to beat.
+    api.get<{ lastPerformance: Record<string, LastPerformance> }>('/workouts/stats/last-performance')
+      .then(r => setLastPerf(r.data?.lastPerformance || {}))
+      .catch(() => {});
   }, []);
 
   // Elapsed timer while session is active
@@ -467,6 +483,55 @@ export default function SessionPage() {
             </span>
           </div>
 
+          {/* Last time — the numbers to beat */}
+          {(() => {
+            const prev = lastPerf[currentEx.name];
+            if (!prev) {
+              return (
+                <div className="rounded-lg px-3 py-2 mb-4 text-xs"
+                  style={{ background: 'var(--bg-hover)', color: 'var(--text-muted)' }}>
+                  First time logging this exercise — today sets your baseline.
+                </div>
+              );
+            }
+
+            const doneSets = currentEx.sets.filter(s => s.completed);
+            const todayVolume = doneSets.reduce(
+              (a, s) => a + (parseInt(s.reps, 10) || 0) * (parseFloat(s.weight) || 0), 0
+            );
+            const delta = prev.totalVolume ? Math.round(((todayVolume - prev.totalVolume) / prev.totalVolume) * 100) : null;
+            const beaten = todayVolume > prev.totalVolume;
+
+            return (
+              <div className="rounded-lg px-3 py-2.5 mb-4"
+                style={{ background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.25)' }}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#3b82f6' }}>
+                    Last time · {new Date(prev.performedAt).toLocaleDateString()}
+                  </p>
+                  <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>
+                    Top {prev.topSetWeight ? `${prev.topSetWeight}kg × ` : ''}{prev.topSetReps}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {prev.sets.map((ps, i) => (
+                    <span key={i} className="text-xs px-1.5 py-0.5 rounded font-medium"
+                      style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)' }}>
+                      {ps.weight ? `${ps.weight}kg × ` : ''}{ps.reps}
+                    </span>
+                  ))}
+                </div>
+                {doneSets.length > 0 && prev.totalVolume > 0 && (
+                  <p className="text-xs mt-2 font-semibold"
+                    style={{ color: beaten ? '#22c55e' : 'var(--text-muted)' }}>
+                    {beaten ? '↑ ' : ''}Today {Math.round(todayVolume).toLocaleString()}kg vs {prev.totalVolume.toLocaleString()}kg
+                    {delta !== null ? ` (${delta >= 0 ? '+' : ''}${delta}%)` : ''}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
+
           {/* Sets table */}
           <div className="space-y-2">
             <div className="grid grid-cols-4 gap-2 px-1 mb-1">
@@ -487,7 +552,7 @@ export default function SessionPage() {
                 </div>
                 <input
                   type="number"
-                  placeholder="0"
+                  placeholder={lastPerf[currentEx.name]?.sets[si]?.weight?.toString() || '0'}
                   value={set.weight}
                   disabled={set.completed}
                   onChange={e => updateSetField(activeExerciseIdx, si, 'weight', e.target.value)}
@@ -500,7 +565,7 @@ export default function SessionPage() {
                 />
                 <input
                   type="number"
-                  placeholder={currentEx.plannedReps}
+                  placeholder={lastPerf[currentEx.name]?.sets[si]?.reps?.toString() || currentEx.plannedReps}
                   value={set.reps}
                   disabled={set.completed}
                   onChange={e => updateSetField(activeExerciseIdx, si, 'reps', e.target.value)}
