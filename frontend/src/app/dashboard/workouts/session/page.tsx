@@ -126,6 +126,7 @@ export default function SessionPage() {
 
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [lastPerf, setLastPerf] = useState<Record<string, LastPerformance>>({});
+  const [lastPerfError, setLastPerfError] = useState('');
   const [elapsed, setElapsed] = useState(0); // seconds
   const [saving, setSaving] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -144,7 +145,7 @@ export default function SessionPage() {
     // What we lifted last time, per exercise — the numbers to beat.
     api.get<{ lastPerformance: Record<string, LastPerformance> }>('/workouts/stats/last-performance')
       .then(r => setLastPerf(r.data?.lastPerformance || {}))
-      .catch(() => {});
+      .catch((e: { message?: string }) => setLastPerfError(e?.message || 'Could not load your previous numbers.'));
   }, []);
 
   // Elapsed timer while session is active
@@ -486,6 +487,15 @@ export default function SessionPage() {
           {/* Last time — the numbers to beat */}
           {(() => {
             const prev = lastPerf[currentEx.name];
+            if (!prev && lastPerfError) {
+              // Never imply this is a first attempt when the lookup failed.
+              return (
+                <div className="rounded-lg px-3 py-2 mb-4 text-xs"
+                  style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.3)', color: '#f87171' }}>
+                  {lastPerfError} Your history is safe — log this set as normal.
+                </div>
+              );
+            }
             if (!prev) {
               return (
                 <div className="rounded-lg px-3 py-2 mb-4 text-xs"

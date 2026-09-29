@@ -19,13 +19,48 @@ app.use(cors({
   credentials: true,
 }));
 
-// Rate limiting - 100 requests per 15 minutes per IP
+// Rate limiting.
+// Errors use the same { success, error: { message } } shape as everything else,
+// so the client can surface a real reason instead of a generic failure.
+const WINDOW_MS = 15 * 60 * 1000;
+
+const limitHandler = (req, res) => {
+  const retryAfterSeconds = Math.ceil(WINDOW_MS / 1000);
+  res.set('Retry-After', String(retryAfterSeconds));
+  res.status(429).json({
+    success: false,
+    error: {
+      message: 'Too many requests. Please wait a few minutes and try again.',
+    },
+  });
+};
+
+// General API traffic. A single dashboard load makes several calls, so this
+// has to be well above the old 100 or ordinary use trips it.
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: { error: 'Too many requests, please try again later.' },
+  windowMs: WINDOW_MS,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: limitHandler,
+  // Health checks are cheap and used by uptime monitors; don't spend budget.
+  skip: (req) => req.path === '/health',
 });
+
+// Credentials endpoints stay tight — this is brute-force protection, not
+// capacity protection, and it should not scale with normal browsing.
+const authLimiter = rateLimit({
+  windowMs: WINDOW_MS,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: limitHandler,
+});
+
 app.use('/api/', limiter);
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/reset-password', authLimiter);
 
 // ===================
 // Body Parsing

@@ -92,6 +92,7 @@ export default function DashboardPage() {
   const [repStats, setRepStats] = useState<RepStats | null>(null);
   const [muscleWindows, setMuscleWindows] = useState<MuscleWindow[]>([]);
   const [muscleRange, setMuscleRange] = useState(1); // default: 7 days
+  const [muscleError, setMuscleError] = useState('');
 
   useEffect(() => {
     setWaterGlasses(loadWaterToday());
@@ -113,7 +114,7 @@ export default function DashboardPage() {
         .catch(() => {}),
       api.get<{ windows: MuscleWindow[] }>('/workouts/stats/muscle-volume')
         .then(r => { if (r.data?.windows) setMuscleWindows(r.data.windows); })
-        .catch(() => {}),
+        .catch((e: { message?: string }) => setMuscleError(e?.message || 'Could not load training data.')),
     ]);
   }, []);
 
@@ -352,6 +353,21 @@ export default function DashboardPage() {
         </div>
 
         {(() => {
+          // A failed request must not look like an empty week.
+          if (muscleError) {
+            return (
+              <div>
+                <p className="text-[11px] tracking-[0.2em] uppercase" style={{ color: '#f87171' }}>
+                  {muscleError}
+                </p>
+                <button onClick={() => window.location.reload()}
+                  className="mt-3 px-3 py-1.5 text-[9px] tracking-[0.2em] uppercase font-semibold"
+                  style={{ border: `1px solid ${borderColor}`, color: 'rgba(255,255,255,0.7)' }}>
+                  Retry
+                </button>
+              </div>
+            );
+          }
           const win = muscleWindows[muscleRange];
           if (!win || win.totalSets === 0) {
             return (
