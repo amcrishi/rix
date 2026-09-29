@@ -1,15 +1,28 @@
 /**
  * Weekly Overview component.
  * Visual display of training days this week.
+ * Completed days are clickable and open that day's workout history.
  * Uses theme CSS variables for dark/light mode support.
  */
 
 interface WeeklyOverviewProps {
   completedDays: number[];
   targetDays: number;
+  /** Called with an ISO date (YYYY-MM-DD) when a completed day is clicked. */
+  onSelectDay?: (isoDate: string) => void;
 }
 
-export default function WeeklyOverview({ completedDays, targetDays }: WeeklyOverviewProps) {
+/** ISO date (YYYY-MM-DD) for a Monday-based weekday index in the current week. */
+function isoDateForDayIndex(index: number, todayIndex: number): string {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - (todayIndex - index));
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${month}-${day}`;
+}
+
+export default function WeeklyOverview({ completedDays, targetDays, onSelectDay }: WeeklyOverviewProps) {
   const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const today = (new Date().getDay() + 6) % 7;
 
@@ -27,6 +40,8 @@ export default function WeeklyOverview({ completedDays, targetDays }: WeeklyOver
           const isCompleted = completedDays.includes(index);
           const isToday = index === today;
           const isFuture = index > today;
+          // Only days with a logged workout are actionable.
+          const isClickable = isCompleted && !!onSelectDay;
 
           return (
             <div key={label} className="flex flex-col items-center gap-2">
@@ -34,8 +49,15 @@ export default function WeeklyOverview({ completedDays, targetDays }: WeeklyOver
                 style={{ color: isToday ? 'var(--color-primary)' : 'var(--text-muted)' }}>
                 {label}
               </span>
-              <div
-                className="w-7 h-7 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all"
+              <button
+                type="button"
+                disabled={!isClickable}
+                onClick={isClickable ? () => onSelectDay(isoDateForDayIndex(index, today)) : undefined}
+                aria-label={isCompleted ? `View ${label}'s workout` : `${label} — no workout logged`}
+                title={isCompleted ? `View ${label}'s workout` : undefined}
+                className={`w-7 h-7 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
+                  isClickable ? 'cursor-pointer hover:scale-110' : 'cursor-default'
+                }`}
                 style={
                   isCompleted
                     ? { background: '#22c55e', color: '#fff' }
@@ -47,7 +69,7 @@ export default function WeeklyOverview({ completedDays, targetDays }: WeeklyOver
                 }
               >
                 {isCompleted ? '✓' : index + 1}
-              </div>
+              </button>
             </div>
           );
         })}
